@@ -1,0 +1,161 @@
+.dz-att-shell { min-height: 100vh; background: var(--dz-paper); }
+
+.dz-year-picker { display: flex; align-items: center; gap: 10px; }
+.dz-year-picker span { font-size: 12.5px; color: var(--dz-muted); }
+.dz-year-picker .dz-select { width: 110px; padding: 6px 8px; font-size: 13px; }
+
+.dz-month-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.dz-month-btn {
+  font-size: 12.5px; font-weight: 500; padding: 7px 13px; border-radius: 6px;
+  cursor: pointer; border: 1px solid var(--dz-line); background: #fff; color: var(--dz-ink);
+}
+.dz-month-btn.is-active { background: var(--dz-navy); border-color: var(--dz-navy); color: #fff; font-weight: 600; }
+
+.dz-loading { padding: 40px; text-align: center; color: var(--dz-muted); font-size: 13px; }
+
+.dz-sheet-card { padding: 18px; }
+.dz-sheet-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.dz-sheet-head-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dz-sheet-title { font-weight: 600; font-size: 15px; color: var(--dz-navy); }
+.dz-sheet-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── the grid ─────────────────────────────────────────────────────────────
+   One column per day, horizontally scrollable, with the name column pinned.
+   This is deliberately the Excel shape rather than a calendar month view -
+   people have filled the Excel for years and the muscle memory is worth more
+   than a prettier layout. */
+.dz-grid-wrap {
+  border: 1px solid var(--dz-line);
+  border-radius: var(--dz-radius);
+  overflow-x: auto;
+}
+.dz-grid { border-collapse: collapse; min-width: 100%; }
+
+.dz-grid-sticky {
+  position: sticky; left: 0; z-index: 2; background: #fff;
+  border-right: 1px solid var(--dz-line);
+  border-bottom: 1px solid var(--dz-line-2);
+  padding: 8px 12px; min-width: 170px; text-align: left;
+}
+.dz-grid-cell {
+  border-right: 1px solid var(--dz-line-2);
+  border-bottom: 1px solid var(--dz-line-2);
+  padding: 7px 0; text-align: center; min-width: 38px; background: #fff;
+}
+.dz-grid-head-cell { font-size: 11.5px; font-weight: 600; color: var(--dz-muted); background: #FAF8F5; }
+.dz-grid-head-cell.is-weekend { color: var(--dz-orange); }
+.dz-grid-date { font-size: 12.5px; font-weight: 600; color: var(--dz-navy); }
+.dz-grid-flag { font-size: 11px; color: var(--dz-muted); }
+.dz-grid-name { font-size: 12.5px; font-weight: 600; color: var(--dz-navy); }
+.dz-grid-name span { display: block; font-size: 10.5px; color: var(--dz-muted); font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.dz-grid-mark-cell { padding: 0; }
+
+.dz-mark {
+  width: 100%; border: none; background: #fff; color: var(--dz-muted);
+  font-size: 13px; font-weight: 700; padding: 9px 0; cursor: pointer;
+}
+.dz-mark.is-p { background: var(--dz-green-bg); color: var(--dz-green); }
+.dz-mark.is-l { background: var(--dz-red-bg);   color: var(--dz-red); }
+.dz-mark.is-h { background: #F2F0EC;            color: var(--dz-grey); }
+.dz-mark.is-locked { cursor: not-allowed; }
+.dz-mark.is-locked:not(.is-h) { opacity: .5; }
+.dz-mark:not(.is-locked):hover { box-shadow: inset 0 0 0 2px var(--dz-line); }
+.dz-mark.is-open { box-shadow: inset 0 0 0 2px var(--dz-cta); }
+
+/* ── the P / L picker ─────────────────────────────────────────────────────
+   Portalled to <body> at fixed coordinates: the grid is an overflow-x
+   container, so a menu positioned inside a cell would be clipped. */
+.dz-mark-menu {
+  position: fixed;
+  z-index: 80;
+  background: #fff;
+  border: 1px solid var(--dz-line);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(13, 27, 42, .18);
+  padding: 4px;
+  overflow: hidden;
+}
+.dz-mark-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.dz-mark-option:hover { background: #FAF8F5; }
+.dz-mark-option.is-current { background: #FAF8F5; }
+.dz-mark-badge {
+  flex: 0 0 auto;
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: 700;
+}
+.dz-mark-badge.is-p { background: var(--dz-green-bg); color: var(--dz-green); }
+.dz-mark-badge.is-l { background: var(--dz-red-bg);   color: var(--dz-red); }
+.dz-mark-text { display: flex; flex-direction: column; min-width: 0; }
+.dz-mark-label { font-size: 13px; font-weight: 500; color: var(--dz-navy); line-height: 1.3; }
+.dz-mark-hint  { font-size: 10.5px; color: var(--dz-muted); line-height: 1.3; }
+.dz-mark-tick  { margin-left: auto; font-size: 12px; color: var(--dz-cta); font-weight: 700; }
+
+/* ── summary ── */
+.dz-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px; margin-top: 14px;
+}
+.dz-stat { border: 1px solid var(--dz-line); border-radius: 7px; padding: 10px 12px; background: #fff; }
+.dz-stat-label { font-size: 11px; color: var(--dz-muted); margin-bottom: 3px; }
+.dz-stat-value { font-size: 19px; font-weight: 600; line-height: 1.1; color: var(--dz-navy); }
+.dz-stat-value.tone-green { color: var(--dz-green); }
+.dz-stat-value.tone-red   { color: var(--dz-red); }
+
+/* ── legend ── */
+.dz-legend {
+  margin-top: 14px; display: flex; gap: 16px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--dz-muted);
+}
+.dz-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.dz-legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--dz-line); }
+.dz-legend-swatch.is-p { background: var(--dz-green-bg); }
+.dz-legend-swatch.is-l { background: var(--dz-red-bg); }
+.dz-legend-swatch.is-h { background: #F2F0EC; }
+
+/* ── the "fill it on time" note under the legend ── */
+.dz-payroll-note {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 13px;
+  border: 1px solid #C9D8E6;
+  border-left: 3px solid #255076;
+  border-radius: 6px;
+  background: #EEF3F8;
+  color: #255076;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.dz-info-icon { flex: 0 0 auto; margin-top: 1px; }
+
+.dz-modal-note { font-size: 13px; color: var(--dz-muted); line-height: 1.6; margin: 0 0 14px; }
+.dz-textarea { resize: vertical; }
+
+.dz-toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--dz-navy); color: #fff; padding: 10px 20px; border-radius: 7px;
+  font-size: 13px; z-index: 90; box-shadow: 0 8px 24px rgba(13, 27, 42, .3);
+}
+
+@media (max-width: 640px) {
+  .dz-sheet-actions { width: 100%; }
+  .dz-grid-sticky { min-width: 130px; }
+}

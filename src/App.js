@@ -1,25 +1,26 @@
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { SessionProvider, ProtectedRoute } from "./utils/SessionContext";
+import Login from "./Login";
+import MyAttendance from "./My_Attendance";
+import "./App.css";
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
+export default function App() {
+    return (
+        <SessionProvider>
+            <Routes>
+                <Route path="/" element={<Navigate to="/attendance" replace />} />
+                <Route path="/login" element={<Login />} />
+                <Route
+                    path="/attendance"
+                    element={
+                        <ProtectedRoute>
+                            <MyAttendance />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route path="*" element={<Navigate to="/attendance" replace />} />
+            </Routes>
+        </SessionProvider>
+    );
 }
-
-export default App;

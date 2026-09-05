@@ -1,13 +1,57 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Dolluz design tokens. Every colour in this app comes from here - inline
+   hex values are how a palette drifts. */
+:root {
+  --dz-navy:   #0D1B2A;
+  --dz-orange: #E8520A;
+  --dz-cta:    #C94409;
+  --dz-paper:  #FBFAF7;
+  --dz-ink:    #1B2430;
+  --dz-muted:  #6E7681;
+  --dz-line:   #E3DED4;
+  --dz-line-2: #F0ECE4;
+
+  --dz-green:    #0E8A4A;
+  --dz-green-bg: #E6F5ED;
+  --dz-red:      #C0342B;
+  --dz-red-bg:   #FBEAE8;
+  --dz-amber:    #B7791F;
+  --dz-amber-bg: #FBF3E0;
+  --dz-grey:     #8A9099;
+  --dz-grey-bg:  #EFEFEF;
+
+  --dz-font: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --dz-radius: 8px;
+  --dz-topbar-h: 62px;
+
+  /* ── Dolluz sign-in scale ──────────────────────────────────────────────
+     Shared with the dAssure sign-in screen so the two read as one product.
+     Measured values - do not round them. Gold is only ever a background
+     fill; as text on a light ground it fails contrast. */
+  --ink: #0E1A2B;  --ink-2: #16273D;  --bg: #EEF2F6;
+  --line: #DCE3EB; --wash: #FAFBFC;
+  --body: #14212F; --muted: #5E6E80;  --faint: #8494A5;
+  --gold: #C9A227; --gold-2: #E5C765; --gold-ink: #231C05;
+  --red: #B0392E;  --blue: #2B5C9B;
+  --font: Poppins, 'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--dz-font);
+  background: var(--dz-paper);
+  color: var(--dz-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--dz-cta);
+  outline-offset: 1px;
 }

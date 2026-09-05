@@ -1,0 +1,328 @@
+/* ============================================================================
+   Sign in - the Dolluz banner + form screen, shared with dAssure.
+
+   The numbers here are measured, not approximate. The fractional ones
+   (37.8px, 2.58px, 13.5px, 14.5px, 10.5px) are deliberate - rounding them is
+   what makes a copy of this screen look almost right.
+   ========================================================================== */
+
+.dzs-root {
+  display: flex;
+  min-height: 100vh;
+  font-family: var(--font);
+}
+
+/* ── LEFT: the banner ──────────────────────────────────────────────────── */
+.dzs-panel {
+  flex: 1;
+  min-width: 620px;
+  background: linear-gradient(140deg, #0E1A2B 0%, #1E3350 100%);
+  color: #fff;
+  padding: 46px 62px 52px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Cropped off the corner on purpose, so it reads as a watermark rather than
+   a sticker sitting in the panel. */
+.dzs-watermark {
+  position: absolute;
+  right: -180px;
+  bottom: -140px;
+  height: 720px;
+  width: auto;
+  opacity: .055;
+  pointer-events: none;
+}
+
+.dzs-rings {
+  position: absolute;
+  left: -120px;
+  top: 120px;
+  width: 620px;
+  opacity: .07;
+  pointer-events: none;
+}
+
+.dzs-banner {
+  position: absolute;
+  left: 62px;
+  right: 62px;
+  top: 50%;
+  transform: translateY(-52%);
+}
+
+/* Gold as a fill with near-black text. Gold as text on a light ground fails
+   contrast, so it is only ever used this way. */
+.dzs-tag {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 3.4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--gold-ink);
+  background: var(--gold);
+  padding: 6px 14px;
+  border-radius: 4px;
+}
+
+.dzs-headline {
+  font-size: 48px;
+  font-weight: 700;
+  margin: 22px 0 0;
+  line-height: 1.12;
+  max-width: 620px;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+
+.dzs-subline {
+  font-size: 18px;
+  margin: 20px 0 0;
+  line-height: 1.65;
+  max-width: 560px;
+  color: rgba(255, 255, 255, .80);
+}
+
+.dzs-rule {
+  height: 3px;
+  width: 90px;
+  background: var(--gold);
+  margin-top: 30px;
+}
+
+.dzs-stats { display: flex; gap: 44px; margin-top: 30px; }
+.dzs-stat-value {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.dzs-stat-label {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, .60);
+  margin-top: 2px;
+}
+
+/* Static - three bars, the first one active. No JS behind this. */
+.dzs-indicator {
+  position: absolute;
+  left: 62px;
+  bottom: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dzs-bar {
+  width: 12px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .30);
+}
+.dzs-bar.is-active { width: 38px; background: var(--gold); }
+
+/* ── RIGHT: the form ───────────────────────────────────────────────────── */
+.dzs-form {
+  flex: 0 0 520px;
+  width: 520px;
+  background: #fff;
+  padding: 0 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.dzs-form .dzs-lockup { margin-bottom: 40px; }
+
+.dzs-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  margin: 0;
+  color: var(--ink);
+}
+.dzs-sub {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 7px 0 28px;
+  line-height: 1.5;
+}
+
+/* ── fields ──
+   The labels are small tracked caps, not sentence case. This is the single
+   biggest thing that makes a copy of this screen look wrong. */
+.dzs-field { margin-bottom: 16px; }
+
+.dzs-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+
+.dzs-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 11px 13px;
+  font-size: 14.5px;
+  font-family: inherit;
+  outline: none;
+  background: #fff;
+  color: var(--body);
+}
+.dzs-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, .22);
+}
+
+/* password reveal, inside the field at the right edge */
+.dzs-reveal-wrap { position: relative; }
+.dzs-reveal-wrap .dzs-input { padding-right: 40px; }
+.dzs-reveal {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: var(--faint);
+}
+.dzs-reveal:hover { color: var(--body); background: rgba(0, 0, 0, .05); }
+
+/* ── options row ── */
+.dzs-options {
+  display: flex;
+  align-items: center;
+  font-size: 13.5px;
+  margin-bottom: 22px;
+}
+.dzs-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dzs-remember input { width: 15px; height: 15px; accent-color: var(--ink); cursor: pointer; }
+
+.dzs-link {
+  margin-left: auto;
+  color: var(--blue);
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.dzs-link:hover { text-decoration: underline; }
+
+/* ── messages ── */
+.dzs-alert {
+  font-size: 12.5px;
+  color: var(--red);
+  background: #FBEFED;
+  border: 1px solid #E8CFCB;
+  border-radius: 7px;
+  padding: 9px 12px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.dzs-hint {
+  font-size: 12.5px;
+  color: var(--blue);
+  background: #EEF3FA;
+  border: 1px solid #CFDDEE;
+  border-radius: 7px;
+  padding: 9px 12px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+/* ── primary button - navy, not the app accent ── */
+.dzs-submit {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  color: #fff;
+  border-radius: 7px;
+  padding: 11px 20px;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dzs-submit:hover:not(:disabled) { background: var(--ink-2); border-color: var(--ink-2); }
+.dzs-submit:disabled { opacity: .45; cursor: not-allowed; }
+
+.dzs-foot {
+  font-size: 12.5px;
+  color: var(--faint);
+  margin-top: 16px;
+  line-height: 1.6;
+}
+
+/* ── the lockup ────────────────────────────────────────────────────────── */
+.dzs-lockup { display: flex; align-items: center; gap: 12px; }
+.dzs-lockup img { height: 44px; width: auto; }
+.dzs-lockup-name {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: var(--ink);
+  line-height: 1;
+}
+.dzs-lockup-sub {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.6px;
+  color: var(--gold);
+  margin-top: 5px;
+}
+
+/* .86 scale, above the form */
+.dzs-lockup.sm { gap: 10.3px; }
+.dzs-lockup.sm img { height: 37.8px; }
+.dzs-lockup.sm .dzs-lockup-name { font-size: 14.6px; letter-spacing: 2.58px; }
+.dzs-lockup.sm .dzs-lockup-sub { font-size: 8.6px; letter-spacing: 2.2px; margin-top: 4px; }
+
+/* The banner uses the corporate lockup artwork, tagline and all, rather than
+   the app lockup above. Its wordmark is already white, so it needs no dark
+   variant - it only ever sits on navy. */
+.dzs-panel-logo { position: relative; height: 54px; width: auto; display: block; }
+
+/* ── responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .dzs-root { flex-direction: column; }
+
+  .dzs-panel { min-width: 0; padding: 28px; min-height: 340px; }
+  .dzs-banner { position: static; transform: none; margin-top: 26px; }
+  .dzs-indicator { position: static; margin-top: 22px; }
+
+  /* The decorative layers are sized for a full-height panel. In the stacked
+     340px strip a 720px eagle stops reading as a watermark and starts
+     competing with the headline. */
+  .dzs-watermark { height: 400px; right: -110px; bottom: -80px; opacity: .05; }
+  .dzs-rings { width: 380px; left: -90px; top: 40px; }
+  .dzs-headline { font-size: 30px; }
+  .dzs-subline { font-size: 15px; }
+  .dzs-stats { gap: 26px; }
+
+  .dzs-form { flex: 1; width: auto; padding: 32px 24px; }
+}
