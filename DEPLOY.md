@@ -24,8 +24,9 @@ pm2 list
 sudo ss -lptn 'sport = :4010'
 ```
 
-If it is taken, change `DATTENDANCE_PORT` in `.env` **and** the `proxy_pass`
-line in the vhost together.
+If it is taken, change the `const port = 4010;` line at the top of `server.js`
+**and** the `proxy_pass` line in the vhost together. The port is hardcoded, the
+same as every other dApp — `.env` carries the domain, not the local port.
 
 **The SQL.** Run `sql/001`, `sql/002` and `sql/004` in Workbench first.
 
@@ -233,7 +234,6 @@ DB_NAME=dattendance
 # MUST be byte-identical to dAdmin's, or a session from Inside D will not verify.
 JWT_SECRET=
 
-DATTENDANCE_PORT=4010
 
 # Sign-in codes and password-reset codes go out through SendGrid. Copy the key
 # from dAdmin's .env — same account. WITHOUT IT NOBODY CAN SIGN IN: the server

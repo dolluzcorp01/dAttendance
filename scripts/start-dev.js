@@ -12,7 +12,8 @@
 //
 //  The API server does NOT scan like this: its port is a fixed contract with
 //  nginx and with REACT_APP_API, so a moving backend port would silently break
-//  CORS and the cookie. Set DATTENDANCE_PORT in .env to move it deliberately.
+//  CORS and the cookie. It is hardcoded at the top of server.js, like every
+//  other dApp - .env carries the domain, not the local port.
 // ============================================================================
 const net = require("net");
 const { spawn } = require("child_process");

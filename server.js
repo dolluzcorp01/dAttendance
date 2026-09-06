@@ -1,8 +1,10 @@
 // ============================================================================
 //  dAttendance - employee app server
 //  Port 4010 (dAdmin 4002, dAssist 4001, dTime 4003, dBug 4004, dSlip 4007).
-//  Override with DATTENDANCE_PORT in .env. Change it here and in nginx
-//  together - nginx proxies dattendance.dolluzcorp.com to this port.
+//
+//  Hardcoded, the same way every other dApp does it - .env carries the domain,
+//  not the local port. Change it here and in the nginx proxy_pass together;
+//  nginx proxies dattendance.dolluzcorp.com to this port.
 // ============================================================================
 require("dotenv").config();
 const express = require("express");
@@ -11,7 +13,7 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 
 const app = express();
-const port = process.env.DATTENDANCE_PORT || 4010;
+const port = 4010;
 
 const isProd = process.env.NODE_ENV === "production";
 

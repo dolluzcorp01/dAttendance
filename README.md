@@ -73,10 +73,12 @@ any `localhost` origin, so a shifted port still passes CORS on the credentialed
 login request. `PORT=3005 npm start` pins it; `npm run start:cra` is plain
 `react-scripts start` if you ever want the original prompt back.
 
-The API port does **not** move. It is a fixed contract with nginx (which
-proxies `dattendance.dolluzcorp.com` to it) and with `REACT_APP_API`; a backend
-that wandered would silently break CORS and the auth cookie. Set
-`DATTENDANCE_PORT` in `.env` to change it deliberately.
+The API port does **not** move. It is hardcoded as `4010` at the top of
+`server.js`, the same way every other dApp does it — `.env` carries the domain,
+not the local port. It is a fixed contract with nginx (which proxies
+`dattendance.dolluzcorp.com` to it) and with `REACT_APP_API`; a backend that
+wandered would silently break CORS and the auth cookie. To move it, change
+`server.js` and the nginx `proxy_pass` together.
 
 `JWT_SECRET` must be byte-identical to dAdmin's. Identity is never duplicated —
 there is no user table in `dattendance`; staff authenticate against
