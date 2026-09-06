@@ -23,8 +23,28 @@ dattendance/
 └── sql/
     ├── 001_dattendance_schema.sql        the new database
     ├── 002_dadmin_registration.sql       registers the app inside dAdmin (required)
-    └── 003_backfill_and_checks.sql       optional backfill + data-quality queries
+    ├── 003_backfill_and_checks.sql       optional backfill + data-quality queries
+    └── 004_auth_otp.sql                  sign-in codes + trusted devices (required)
 ```
+
+## Signing in
+
+Two steps. The password is checked against `dadmin.employee`, then a 6-digit
+code goes to the work address on that record; the session is only issued once
+the code is verified. Codes are bcrypt-hashed in `att_otp`, expire in two
+minutes, are capped at five wrong guesses and are consumed on use.
+
+**Remember for 14 days** trusts *this browser*, not the account: it stores a
+random token (only its SHA-256 is kept) and skips the code on that browser
+until it expires. Every other browser still asks. Changing the password revokes
+all of them.
+
+**Forgot password** is the same code, then a new password, written to
+`dadmin.employee.account_pass` as bcrypt. An unknown address gets the identical
+response to a known one, so the form cannot be used to test who has an account.
+
+Without `SENDGRID_API_KEY` the server refuses to issue codes in production; in
+development it prints the code to the console so you can sign in offline.
 
 `src/backend_routes/utils/attendanceCalendar.js` decides what every date is for
 an employee — working day, week-off, declared holiday, or before their joining

@@ -6,7 +6,8 @@ Same shape as the dAssist runbook. Differences from it, up front:
 |---|---|---|
 | Backend port | 4001 | **4010** |
 | Uploaded files | `Tickets_file_uploads/` | **none** — no upload location in the vhost |
-| Database | existing | **`001` and `002` must run before anyone can log in** |
+| Database | existing | **`001`, `002` and `004` must run before anyone can sign in** |
+| Sign-in | password | **password + a code emailed via SendGrid** |
 
 ---
 
@@ -26,25 +27,27 @@ sudo ss -lptn 'sport = :4010'
 If it is taken, change `DATTENDANCE_PORT` in `.env` **and** the `proxy_pass`
 line in the vhost together.
 
-**The SQL.** The login query reads `dadmin.employee.app_dAttendance`. Until
-`sql/002` runs, every login returns 500. Run `sql/001` and `sql/002` in
-Workbench first — see the repo's `sql/` folder. `002` is not idempotent; run it
-once.
+**The SQL.** Run `sql/001`, `sql/002` and `sql/004` in Workbench first.
+
+- `001` creates the `dattendance` database. Safe to re-run.
+- `002` adds `dadmin.employee.app_dAttendance`, which the login query reads —
+  without it every sign-in returns 500. **Not idempotent; run it once.**
+- `004` creates `att_otp` and `att_trusted_device` for the emailed sign-in code
+  and "Remember for 14 days". Without it sign-in fails at the second step.
+  Safe to re-run.
 
 ---
 
 ## 1. Push the code
 
-The repo is local-only and still on `master`. Create
-`https://github.com/dolluzcorp01/dAttendance.git`, then from your machine:
+The repo lives at `https://github.com/dolluzcorp01/dAttendance` on `main`.
+From your machine:
 
 ```bash
 cd c:/Users/91638/Desktop/Dolluzcorp/dApps/dAttendance/dattendance
 git add -A
-git commit -m "dAttendance employee app"
-git branch -M main                 # the runbook below pulls main
-git remote add origin https://github.com/dolluzcorp01/dAttendance.git
-git push -u origin main
+git commit -m "..."
+git push
 ```
 
 `.env` and `build/` are gitignored, so both are created on the droplet.
@@ -232,6 +235,14 @@ JWT_SECRET=
 
 DATTENDANCE_PORT=4010
 
+# Sign-in codes and password-reset codes go out through SendGrid. Copy the key
+# from dAdmin's .env — same account. WITHOUT IT NOBODY CAN SIGN IN: the server
+# refuses to issue a code in production rather than print it to a log.
+SENDGRID_API_KEY=
+DATTENDANCE_FROM_EMAIL="dAttendance" <connect@dolluzcorp.com>
+OTP_LENGTH=6
+BCRYPT_ROUNDS=10
+
 # Turns on Secure + SameSite=None cookies and drops the localhost CORS bypass.
 # server.js loads dotenv before it reads this, so setting it here is enough,
 # and react-scripts build is unaffected by it.
@@ -242,10 +253,11 @@ NODE_ENV=production
 > `.env`. It makes the login cookie `Secure`, which a browser refuses to store
 > over `http://localhost`, and you will be unable to sign in on your machine.
 
-Copy `DB_*` and `JWT_SECRET` from the dAdmin `.env` already on this box:
+Copy `DB_*`, `JWT_SECRET` and `SENDGRID_API_KEY` from the dAdmin `.env` already
+on this box — dAttendance shares all four:
 
 ```bash
-grep -E '^(DB_HOST|DB_USER|DB_PASSWORD|JWT_SECRET)=' /var/www/dolluzcorp.com/dadmin/.env
+grep -E '^(DB_HOST|DB_USER|DB_PASSWORD|JWT_SECRET|SENDGRID_API_KEY)=' /var/www/dolluzcorp.com/dadmin/.env
 ```
 
 ---

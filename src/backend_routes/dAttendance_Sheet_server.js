@@ -35,15 +35,27 @@ const todayYmd = () => {
     return now.toISOString().slice(0, 10);
 };
 
+// NOT `Number(x) || fallback`. 0 is falsy, so a policy of "no free leave days"
+// (allowed_leave_per_month = 0) would silently read back as 2 and under-report
+// Loss of Pay on every payslip. Same for edit_request_limit = 0, which is how
+// you turn edit requests off. Fall back only when the value is absent or not
+// a number.
+const num = (raw, fallback, min) => {
+    const n = Number(raw);
+    const v = (raw === undefined || raw === null || raw === "" || !Number.isFinite(n)) ? fallback : n;
+    return min === undefined ? v : Math.max(min, v);
+};
+
 const loadConfig = async () => {
     const rows = await q(datt, `SELECT config_key, config_value FROM att_config`);
     const c = Object.fromEntries(rows.map((r) => [r.config_key, r.config_value]));
     return {
-        allowedLeave: Number(c.allowed_leave_per_month) || 2,
-        editLimit: Number(c.edit_request_limit) || 2,
-        fillForwardFromDay: Number(c.fill_forward_from_day) || 24,
+        allowedLeave: num(c.allowed_leave_per_month, 2, 0),
+        editLimit: num(c.edit_request_limit, 2, 0),
+        // A day outside 1-31 would put the fill-forward window nowhere.
+        fillForwardFromDay: Math.min(31, num(c.fill_forward_from_day, 24, 1)),
         leaveSource: c.leave_source || "manual",
-        minYear: Number(c.min_year) || 2018,
+        minYear: num(c.min_year, 2018, 1970),
     };
 };
 
