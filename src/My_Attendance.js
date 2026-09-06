@@ -251,11 +251,18 @@ export default function MyAttendance() {
                 flash(body.error || "Download failed");
                 return;
             }
+            // Take the name from Content-Disposition so the browser and the
+            // server never disagree about the extension - they did once, when
+            // this said .csv and the server had started sending .xlsx.
+            const disp = res.headers.get("Content-Disposition") || "";
+            const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disp);
+            const fallback = `${employee.emp_id}_Attendance_Sheet_${year}_${String(month).padStart(2, "0")}.xlsx`;
+
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `${employee.emp_id}_Attendance_${year}_${String(month).padStart(2, "0")}.csv`;
+            a.download = match ? decodeURIComponent(match[1]) : fallback;
             document.body.appendChild(a);
             a.click();
             a.remove();

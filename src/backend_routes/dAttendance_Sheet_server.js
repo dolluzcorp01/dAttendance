@@ -18,6 +18,7 @@ const router = express.Router();
 const getDBConnection = require("../../config/db");
 const { verifyJWT } = require("./Login_server");
 const cal = require("./utils/attendanceCalendar");
+const { buildAttendanceWorkbook, workbookFilename } = require("./utils/attendanceWorkbook");
 
 const dadmin = getDBConnection("dadmin");
 const datt = getDBConnection("dattendance");
@@ -539,33 +540,25 @@ router.get("/download", verifyJWT, async (req, res) => {
         const marks = Object.fromEntries(markRows.map((r) => [r.d, r.day_status]));
         const s = cal.summariseSheet({ calendar, marks, allowedLeave: cfg.allowedLeave });
 
-        const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-        const lines = [
-            [esc(`${emp.emp_name} (${emp.emp_id})`), esc(`${year}-${String(month).padStart(2, "0")}`)].join(","),
-            "",
-            ["Day", ...calendar.days.map((d) => esc(d.dow_label))].join(","),
-            ["Date", ...calendar.days.map((d) => esc(d.date.slice(8)))].join(","),
-            ["Status", ...calendar.days.map((d) => esc(marks[d.date] || ""))].join(","),
-            ["Working day", ...calendar.days.map((d) => (d.day_type === "WORK" ? 1 : 0))].join(","),
-            "",
-            ["Present", s.present_days].join(","),
-            ["Leave taken", s.leave_days].join(","),
-            ["Allowed leave", s.allowed_leave].join(","),
-            ["Days in month", s.days_in_month].join(","),
-            ["Total working days", s.working_days].join(","),
-            ["Worked days", s.worked_days].join(","),
-            ["Total day off", s.days_off].join(","),
-            ["Loss of pay", s.lop_days].join(","),
-            ["Payable days", s.payable_days].join(","),
-        ];
+        // The designation column. loadEmployee() carries the job_position id,
+        // not its name, so resolve it the same way /me does.
+        const [job] = await q(dadmin,
+            `SELECT job_name FROM job_position_config WHERE job_id = ? LIMIT 1`, [emp.job_position]);
+
+        const buffer = await buildAttendanceWorkbook({
+            employee: { ...emp, job_name: job?.job_name || null },
+            year, month, calendar, summary: s, marks,
+        });
 
         await logActivity(req.emp_id, year, month, "Downloaded",
             `${year}-${String(month).padStart(2, "0")} sheet`, req.emp_id, req.ip);
 
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Content-Disposition",
-            `attachment; filename="${emp.emp_id}_Attendance_${year}_${String(month).padStart(2, "0")}.csv"`);
-        res.send(lines.join("\n"));
+        const filename = workbookFilename(emp.emp_id, year, month);
+        res.setHeader("Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("Content-Length", buffer.length);
+        res.send(buffer);
     } catch (err) {
         console.error("[sheet] /download", err);
         res.status(500).json({ error: "Database error" });
