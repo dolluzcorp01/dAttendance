@@ -64,13 +64,23 @@ const C = {
 const MONTHS = ["January", "February", "March", "April", "May", "June",
                 "July", "August", "September", "October", "November", "December"];
 
-const thick = { style: "thick" };
+// The grid lines are WHITE, not the default black. On a navy sheet a black
+// thick border reads as a heavy shadow around every cell; white is what makes
+// the original look like a ruled table.
+const thick = { style: "thick", color: { argb: C.headerText } };
 const allThick = { top: thick, left: thick, bottom: thick, right: thick };
 const centre = { horizontal: "center", vertical: "middle" };
 
-/** Every cell in this sheet is boxed in thick borders and centred. */
-function paint(cell, { fill, color, size = 12, bold = true, wrap = false, numFmt }) {
-    cell.font = { name: "Calibri", size, bold, color: { argb: color || C.headerText } };
+/**
+ * Every cell in this sheet is boxed in thick white borders, centred, and
+ * underlined. The underline is on everything in the original except the
+ * employee name, so it defaults on and B4 opts out.
+ */
+function paint(cell, { fill, color, size = 12, bold = true, wrap = false, numFmt, underline = true }) {
+    cell.font = {
+        name: "Calibri", size, bold, underline,
+        color: { argb: color || C.headerText },
+    };
     if (fill) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
     cell.alignment = { ...centre, wrapText: wrap };
     cell.border = allThick;
@@ -135,23 +145,20 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     const cell = (r, c) => ws.getCell(r, c);
 
     // ── row 1 ──
-    mergeStyled(ws, 1, 1, 1, 2,
-        { fill: C.titleFill, color: C.titleText, size: 28, bold: false }).value = "Dolluz Corp";
+    // "Dolluz Corp" links out, as it does in the original. Its blue-and-
+    // underlined styling is already hyperlink styling, so it reads as one.
+    mergeStyled(ws, 1, 1, 1, 2, { fill: C.titleFill, color: C.titleText, size: 28, bold: false })
+        .value = { text: "Dolluz Corp", hyperlink: "https://dolluzcorp.com/" };
 
     // C1:C2 stays navy and the logo sits on top of it, exactly as the original
     // does: the image carries its own white panel, so the navy shows around it.
     mergeStyled(ws, 1, 3, 2, 3, { fill: C.header, color: C.accentText, size: 18 });
     if (LOGO_BUFFER) {
         const imgId = wb.addImage({ buffer: LOGO_BUFFER, extension: "png" });
-        // Column C is 16.57 chars wide (~121px); rows 1+2 are 37.5+30pt (~90px).
-        // Fit the square logo inside that with a little margin, and nudge it to
-        // the middle rather than letting it hug the top-left corner.
-        const boxW = 121, boxH = 90, side = 78;
-        ws.addImage(imgId, {
-            tl: { col: 2 + (boxW - side) / 2 / boxW, row: 0 + (boxH - side) / 2 / boxH },
-            ext: { width: side, height: side },
-            editAs: "oneCell",
-        });
+        // Span the whole C1:C2 block rather than placing a fixed-size square in
+        // it. The original anchors it the same way - a twoCellAnchor from C1 to
+        // C2 - so the logo grows with the cell instead of floating in a corner.
+        ws.addImage(imgId, { tl: { col: 2, row: 0 }, br: { col: 3, row: 2 }, editAs: "oneCell" });
     }
 
     cell(1, 4).value = "Month";
@@ -202,9 +209,10 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     // ── row 4: the employee ──
     cell(4, 1).value = 1;
     paint(cell(4, 1), { fill: C.header });
-    // Name, id and designation share the grey band in the original.
+    // Name, id and designation share the grey band in the original. The name is
+    // the single cell in the whole sheet that is NOT underlined.
     cell(4, 2).value = employee.emp_name;
-    paint(cell(4, 2), { fill: C.nameCell });
+    paint(cell(4, 2), { fill: C.nameCell, underline: false });
     cell(4, 3).value = employee.emp_id;
     paint(cell(4, 3), { fill: C.nameCell });
     cell(4, 4).value = employee.job_name || "";
