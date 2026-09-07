@@ -20,6 +20,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import Swal from "sweetalert2";
 import { apiFetch, EMP_PROFILE_FILE_BASE } from "./utils/api";
+import { profileColorFromName, initialFromName } from "./utils/profileColor";
 import "./TopNavbar.css";
 
 export default function TopNavbar({ loggedInEmp, setLoggedInEmp }) {
@@ -115,8 +116,11 @@ export default function TopNavbar({ loggedInEmp, setLoggedInEmp }) {
 
     // ── Avatar background helper ─────────────────────────────
     // A photo when there is one, otherwise a colour derived from the name.
-    // profile_color / profile_letters are computed server-side in /api/auth/me
-    // using dSlip's generator, so the same person is the same colour in both.
+    //
+    // /api/auth/me already computes profile_color with the suite's generator,
+    // so that value is used as-is. utils/profileColor is the fallback for when
+    // it is absent - it runs the identical algorithm on the identical seed
+    // (the title-cased emp_first_name), so the two can never disagree.
     const avatarStyle = (emp) => {
         if (!emp) return { backgroundColor: "#E8520A" };
         if (emp.emp_profile_img) {
@@ -125,11 +129,12 @@ export default function TopNavbar({ loggedInEmp, setLoggedInEmp }) {
                 : `${EMP_PROFILE_FILE_BASE}/${emp.emp_profile_img.replace(/\\/g, "/")}`;
             return { backgroundImage: `url(${url})`, backgroundColor: "transparent" };
         }
-        return { backgroundColor: emp.profile_color || "#E8520A" };
+        return { backgroundColor: emp.profile_color || profileColorFromName(emp.emp_first_name) };
     };
 
+    // One letter, like dAdmin's left navbar - not two-letter initials.
     const initials = loggedInEmp
-        ? (loggedInEmp.profile_letters || (loggedInEmp.emp_first_name?.[0] || "").toUpperCase())
+        ? (loggedInEmp.profile_letters || initialFromName(loggedInEmp.emp_first_name))
         : "?";
 
     const fullName = loggedInEmp
@@ -175,8 +180,8 @@ export default function TopNavbar({ loggedInEmp, setLoggedInEmp }) {
                         <button
                             type="button"
                             className="tn-drop-item"
-                            onClick={() => handleCopyEmail("hr@dolluzcorp.com")}
-                            title="Copy HR email"
+                            onClick={() => handleCopyEmail("admin@dolluzcorp.com")}
+                            title="Copy admin email"
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M4 13v-1a8 8 0 0 1 16 0v1" />
@@ -184,7 +189,7 @@ export default function TopNavbar({ loggedInEmp, setLoggedInEmp }) {
                                 <rect x="17.5" y="13" width="4" height="6" rx="1.5" />
                                 <path d="M20 19v.5a3 3 0 0 1-3 3h-3" />
                             </svg>
-                            hr@dolluzcorp.com
+                            admin@dolluzcorp.com
                         </button>
 
                         <a className="tn-drop-item" href="/login?changePassword" onClick={() => setDropOpen(false)}>
