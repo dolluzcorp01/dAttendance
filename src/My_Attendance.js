@@ -119,6 +119,11 @@ export default function MyAttendance() {
         }
         const allowed = data.summary.allowed_leave;
         const working = data.summary.working_days;
+        // Loss of pay is no longer shown on this page, but it still has to be
+        // recomputed: payable_days depends on it, and dropping it from the
+        // override would let the server's pre-edit values fall through from the
+        // spread above and go stale against unsaved clicks. The number payroll
+        // reads is the server's own, from summariseSheet().
         const lop = Math.max(0, leave - allowed);
         return {
             ...data.summary,
@@ -511,8 +516,6 @@ export default function MyAttendance() {
                             <Stat label="Total working days" value={summary.working_days} />
                             <Stat label="Worked days"        value={summary.worked_days} />
                             <Stat label="Total day off"      value={summary.days_off} />
-                            <Stat label="Loss of pay"        value={summary.lop_days}
-                                  tone={summary.lop_days > 0 ? "red" : "plain"} />
                         </div>
 
                         <div className="dz-legend">
