@@ -60,6 +60,7 @@ export default function MyAttendance() {
     const [busy, setBusy] = useState(false);
     const [toast, setToast] = useState(null);
     const [editModal, setEditModal] = useState(null);   // reason text, or null
+    const [confirmSubmit, setConfirmSubmit] = useState(false);
     const [error, setError] = useState("");
 
     // The open P/L picker: { date, top, left, width }. Screen coordinates,
@@ -202,7 +203,7 @@ export default function MyAttendance() {
     }, [picker]);
 
     // A month change or a reload can drop the day the menu was anchored to.
-    useEffect(() => { setPicker(null); }, [year, month]);
+    useEffect(() => { setPicker(null); setConfirmSubmit(false); }, [year, month]);
 
     const markRemainingPresent = () => {
         setMarks((m) => {
@@ -229,6 +230,7 @@ export default function MyAttendance() {
     };
 
     const submit = async () => {
+        setConfirmSubmit(false);
         setBusy(true);
         try {
             const res = await apiJson("/api/sheet/submit", {
@@ -439,7 +441,7 @@ export default function MyAttendance() {
                                                 : !summary.complete
                                                     ? "Mark every working day first" : ""
                                         }
-                                        onClick={submit}
+                                        onClick={() => setConfirmSubmit(true)}
                                     >
                                         Submit
                                     </button>
@@ -553,6 +555,44 @@ export default function MyAttendance() {
                     />
                 )}
             </div>
+
+            {/* Submitting is one-way: the sheet locks, and reopening it costs
+                one of a small number of edit requests. That is worth a beat of
+                confirmation - and it doubles as a last look at the counts. */}
+            {confirmSubmit && data && (
+                <div className="dz-modal-backdrop" onClick={() => setConfirmSubmit(false)}>
+                    <div className="dz-modal dz-modal-sm" onClick={(e) => e.stopPropagation()}>
+                        <div className="dz-modal-head">
+                            <span className="dz-modal-title">
+                                Submit {MONTHS[month - 1]} {year}?
+                            </span>
+                            <button type="button" className="dz-btn dz-btn-sm dz-btn-quiet"
+                                    onClick={() => setConfirmSubmit(false)}>Close</button>
+                        </div>
+                        <div className="dz-modal-body">
+                            <p className="dz-modal-note">
+                                Once submitted the sheet goes to your reporting manager and
+                                locks — you cannot change it afterwards without raising an
+                                edit request, and you get {data.sheet.edit_requests_left} of
+                                those for this month.
+                            </p>
+                            <div className="dz-confirm-figures">
+                                <div><span>Present</span><strong>{summary.present_days}</strong></div>
+                                <div><span>Leave</span><strong>{summary.leave_days}</strong></div>
+                                <div><span>Total working days</span><strong>{summary.working_days}</strong></div>
+                            </div>
+                        </div>
+                        <div className="dz-modal-foot">
+                            <button type="button" className="dz-btn dz-btn-ghost"
+                                    onClick={() => setConfirmSubmit(false)}>Cancel</button>
+                            <button type="button" className="dz-btn dz-btn-primary"
+                                    disabled={busy} onClick={submit}>
+                                Yes, submit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {editModal !== null && (
                 <div className="dz-modal-backdrop" onClick={() => setEditModal(null)}>

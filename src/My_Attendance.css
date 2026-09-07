@@ -179,6 +179,29 @@
 .dz-info-icon { flex: 0 0 auto; margin-top: 1px; }
 
 .dz-modal-note { font-size: 13px; color: var(--dz-muted); line-height: 1.6; margin: 0 0 14px; }
+.dz-modal-sm { max-width: 430px; }
+
+/* The three counts on the submit confirmation - a last look before locking. */
+.dz-confirm-figures {
+  display: flex;
+  border: 1px solid var(--dz-line-2);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.dz-confirm-figures > div {
+  flex: 1;
+  padding: 11px 8px;
+  text-align: center;
+  background: #FAF9F7;
+}
+.dz-confirm-figures > div + div { border-left: 1px solid var(--dz-line-2); }
+.dz-confirm-figures span {
+  display: block;
+  font-size: 11px;
+  color: var(--dz-muted);
+  margin-bottom: 3px;
+}
+.dz-confirm-figures strong { font-size: 19px; color: var(--dz-navy); }
 .dz-textarea { resize: vertical; }
 
 .dz-toast {
