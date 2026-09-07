@@ -11,7 +11,8 @@ import { useNavigate } from "react-router-dom";
 import { apiFetch } from "./api";
 
 const SessionContext = createContext({
-    employee: null, ready: false, refetch: async () => {}, logout: async () => {},
+    employee: null, setEmployee: () => {}, ready: false,
+    refetch: async () => {}, logout: async () => {},
 });
 
 export function SessionProvider({ children }) {
@@ -38,7 +39,11 @@ export function SessionProvider({ children }) {
         setEmployee(null);
     }, []);
 
-    const value = useMemo(() => ({ employee, ready, refetch, logout }), [employee, ready, refetch, logout]);
+    // setEmployee is exposed so a profile-photo upload can refresh the avatar
+    // without a round trip to /me.
+    const value = useMemo(
+        () => ({ employee, setEmployee, ready, refetch, logout }),
+        [employee, ready, refetch, logout]);
     return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

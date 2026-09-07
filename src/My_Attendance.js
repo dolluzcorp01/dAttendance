@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { apiJson, apiFetch } from "./utils/api";
 import { useSession } from "./utils/SessionContext";
 import dolluzEagle from "./assets/img/app_eagle.png";
+import TopNavbar from "./TopNavbar";
 import "./My_Attendance.css";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -47,7 +48,7 @@ const prettyDate = (ymd) => {
 };
 
 export default function MyAttendance() {
-    const { employee, logout } = useSession();
+    const { employee, setEmployee } = useSession();
 
     const [years, setYears] = useState([]);
     const [year, setYear] = useState(null);
@@ -309,13 +310,11 @@ export default function MyAttendance() {
                         </div>
                     )}
                     {data?.leave_source === "dtime" && <span className="dz-pill dz-pill-navy">Leave from dTime</span>}
-                    <div>
-                        <div className="dz-user-name">{employee?.emp_name}</div>
-                        <div className="dz-user-role">{employee?.job_name} · {employee?.emp_location}</div>
-                    </div>
-                    <button type="button" className="dz-btn dz-btn-sm dz-btn-ghost" onClick={logout}>
-                        Sign out
-                    </button>
+                    {/* Name, role and Sign out all live in here now - the chip
+                        opens a dropdown carrying Logout, and clicking its
+                        avatar opens the photo upload. Same component shape as
+                        dSlip's TopNavbar. */}
+                    <TopNavbar loggedInEmp={employee} setLoggedInEmp={setEmployee} />
                 </div>
             </header>
 

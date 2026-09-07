@@ -47,8 +47,17 @@ const normaliseIdentifier = (v) => (v.includes("@") ? v : v.toUpperCase());
 
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
+// "Change Password" in the top-nav dropdown lands here as /login?changePassword,
+// the same entry point dSlip uses. dAttendance has no separate change-password
+// screen: changing a password IS the reset flow - prove the mailbox with an
+// emailed code, then set a new one - so the query param just opens it at step
+// one instead of the sign-in form.
+const wantsPasswordChange = () =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("changePassword");
+
 export default function Login() {
-    const [step, setStep] = useState("credentials");
+    const [step, setStep] = useState(() => (wantsPasswordChange() ? "forgot-email" : "credentials"));
 
     const [empId, setEmpId] = useState("");
     const [password, setPassword] = useState("");
@@ -77,8 +86,11 @@ export default function Login() {
     const { employee, ready, refetch } = useSession();
 
     // Already signed in (e.g. arrived from Inside D with a live cookie).
+    // NOT when they came here to change their password: that link is reached
+    // FROM the app while signed in, so bouncing them back would make the menu
+    // item do nothing.
     useEffect(() => {
-        if (ready && employee) navigate("/attendance", { replace: true });
+        if (ready && employee && !wantsPasswordChange()) navigate("/attendance", { replace: true });
     }, [ready, employee, navigate]);
 
     // ── the two countdowns ────────────────────────────────────────────────
@@ -208,6 +220,13 @@ export default function Login() {
                 method: "POST",
                 body: JSON.stringify({ reset_token: resetToken, password: newPass, confirm: confirmPass }),
             });
+            // Reached from the app while signed in (/login?changePassword), the
+            // old session would otherwise carry on under the old password. End
+            // it, so "sign in with your new password" is actually true.
+            if (employee) {
+                try { await apiJson("/api/auth/logout", { method: "POST", body: "{}" }); } catch { /* ignore */ }
+                await refetch();
+            }
             setStep("credentials");
             setPassword(""); setNewPass(""); setConfirmPass("");
             setResetToken(null); setChallenge(null);

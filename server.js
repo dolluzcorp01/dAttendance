@@ -51,9 +51,11 @@ app.set("trust proxy", 1);
 
 const LoginRoutes = require("./src/backend_routes/Login_server");
 const SheetRoutes = require("./src/backend_routes/dAttendance_Sheet_server");
+const EmployeeRoutes = require("./src/backend_routes/Employee_server");
 
 app.use("/api/auth", LoginRoutes.router);
 app.use("/api/sheet", SheetRoutes);
+app.use("/api/employee", EmployeeRoutes);
 
 app.get("/api/health", (req, res) => res.json({ ok: true, app: "dAttendance", port }));
 

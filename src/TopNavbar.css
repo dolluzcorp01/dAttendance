@@ -1,0 +1,306 @@
+/* ============================================================================
+   Top-nav profile chip - ported from dSlip's TopNavbar.css.
+
+   Every `tn-*` class is byte-identical to dSlip's, so the dropdown, the upload
+   modal and the copied-toast look and behave the same in both apps.
+
+   The three chrome classes are prefixed `dz-topnav-` rather than
+   `dslip-topnav-`: a class literally named "dslip" inside dAttendance is a
+   maintenance trap, and these three are the only ones that had to change
+   anyway - dSlip's navbar is dark navy, dAttendance's is white, so the name,
+   tagline and chevron take dark text instead of light.
+   ========================================================================== */
+
+/* ── the chip ─────────────────────────────────────────────────────────────── */
+.dz-topnav-right {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dz-topnav-name {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.dz-topnav-name .tn-fullname {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--dz-navy);
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dz-topnav-name .tn-tagline {
+    font-size: 11px;
+    color: var(--dz-muted);
+    font-style: italic;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dz-topnav-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background-color: #E8520A;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+    /* dSlip rims this in translucent white against its navy bar; on a white bar
+       that is invisible, so it takes the page's own hairline instead. */
+    border: 2px solid var(--dz-line);
+}
+
+.dz-topnav-chevron {
+    color: var(--dz-muted);
+    font-size: 11px;
+    transition: transform 0.2s;
+}
+
+.dz-topnav-chevron.open {
+    transform: rotate(180deg);
+}
+
+/* ── dropdown ─────────────────────────────────────────────────────────────── */
+.dz-topnav-dropdown {
+    position: absolute;
+    top: calc(100% + 14px);
+    right: 0;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
+    min-width: 240px;
+    overflow: hidden;
+    animation: tnDropIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    z-index: 9999;
+    cursor: default;
+}
+
+@keyframes tnDropIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tn-drop-profile {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f8;
+}
+
+.tn-drop-profile-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #E8520A;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Hovering the avatar is what opens the photo modal, so say so. */
+.tn-drop-profile-avatar:hover::after {
+    content: "📷";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.tn-drop-profile-text .tn-drop-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a2e;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.tn-drop-profile-text .tn-drop-tagline {
+    font-size: 10px;
+    color: #aaa;
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.tn-drop-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    text-decoration: none;
+    font-family: inherit;
+}
+
+.tn-drop-item:hover { background: #f8f9fb; color: #E8520A; }
+.tn-drop-item.danger { color: #dc3545; }
+.tn-drop-item.danger:hover { background: #fff5f5; color: #dc3545; }
+
+.tn-drop-divider { height: 1px; background: #f0f0f8; margin: 4px 0; }
+
+/* ── profile upload modal ─────────────────────────────────────────────────── */
+.tn-profile-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tn-profile-modal {
+    background: #fff;
+    border-radius: 14px;
+    padding: 28px 24px 20px;
+    width: 320px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    position: relative;
+}
+
+.tn-profile-modal h3 {
+    margin: 0 0 20px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.tn-profile-modal-close {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: #888;
+}
+
+.tn-profile-preview {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+    margin: 0 auto 16px;
+    border: 3px solid #E8520A;
+}
+
+/* dSlip inlines this placeholder; it is a class here so the modal has no
+   inline styles to keep in step with the rest. */
+.tn-profile-placeholder {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    background: #f0f0f8;
+}
+
+.tn-profile-modal-btns {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.tn-btn-cancel {
+    background: #f0f0f8;
+    color: #555;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+}
+
+.tn-btn-save {
+    background: #E8520A;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 20px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+}
+
+.tn-btn-save:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── "copied" toast ───────────────────────────────────────────────────────── */
+.tn-copy-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 26px;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #0D1B2A;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 999px;
+    box-shadow: 0 12px 34px -10px rgba(13, 27, 42, 0.55);
+    animation: tnCopyRise 0.2s ease-out;
+}
+
+.tn-copy-toast svg { color: #2ecc71; flex: none; }
+
+@keyframes tnCopyRise {
+    from { opacity: 0; transform: translate(-50%, 10px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ── mobile: keep the avatar, drop the name block ─────────────────────────── */
+@media (max-width: 560px) {
+    .dz-topnav-name { display: none; }
+}

@@ -509,13 +509,42 @@ router.post("/forgot/reset", async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // GET /me  - who is logged in. The frontend session context calls this on load.
+//
+// profile_letters and profile_color are NOT columns - dadmin.employee has
+// neither. dSlip derives them per request, and this is a byte-for-byte copy of
+// that derivation so the same person gets the same avatar colour in both apps.
+// If dSlip's generator ever changes, change it here too.
 // ---------------------------------------------------------------------------
+const generateColorFromText = (text) => {
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+        hash = text.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash % 360);
+    return `hsl(${hue}, 70%, 60%)`;
+};
+
+/** dSlip title-cases the first name and keeps at most two words. Mirrored. */
+const withProfile = (emp) => {
+    const firstName = emp.emp_first_name
+        ? emp.emp_first_name.split(" ")
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .slice(0, 2).join(" ")
+        : "";
+    return {
+        ...emp,
+        emp_first_name: firstName,
+        profile_letters: firstName.charAt(0).toUpperCase(),
+        profile_color: generateColorFromText(firstName || "User"),
+    };
+};
+
 router.get("/me", verifyJWT, (req, res) => {
     dadmin.query(
-        `SELECT e.emp_id,
+        `SELECT e.emp_id, e.emp_first_name, e.emp_last_name,
                 CONCAT_WS(' ', e.emp_first_name, e.emp_last_name) AS emp_name,
                 e.emp_mail_id, e.emp_location, e.emp_department, e.job_position,
-                e.reporting_manager, e.emp_access_level,
+                e.reporting_manager, e.emp_access_level, e.emp_profile_img,
                 DATE_FORMAT(e.joining_date, '%Y-%m-%d') AS joining_date,
                 j.job_name, d.department_name
            FROM employee e
@@ -530,7 +559,7 @@ router.get("/me", verifyJWT, (req, res) => {
                 return res.status(500).json({ message: "Database error" });
             }
             if (!rows || !rows[0]) return res.status(403).json({ message: "Account inactive" });
-            res.json({ success: true, employee: rows[0] });
+            res.json({ success: true, employee: withProfile(rows[0]) });
         }
     );
 });
