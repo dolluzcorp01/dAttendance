@@ -31,8 +31,10 @@ CREATE TABLE IF NOT EXISTS `att_config` (
 INSERT INTO `att_config` (`config_key`, `config_value`, `description`) VALUES
   ('allowed_leave_per_month', '2',      'Leave days per month before Loss of Pay begins'),
   ('edit_request_limit',      '2',      'Edit requests an employee may raise per month'),
-  ('reminder_1_day',          '21',     'Day of month reminder 1 is due'),
-  ('reminder_2_day',          '24',     'Day of month reminder 2 is due'),
+  -- These are the days the nudge GOES OUT, not the deadline it quotes. Both
+  -- mails cite the employee's last working day of the month as the due date.
+  ('reminder_1_day',          '21',     'Day of month reminder 1 is sent'),
+  ('reminder_2_day',          '24',     'Day of month reminder 2 is sent'),
   ('fill_forward_from_day',   '24',     'From this day the employee may fill the rest of the month'),
   ('leave_source',            'manual', 'manual = employee marks L | dtime = read approved leave_requests'),
   ('min_year',                '2018',   'Earliest year selectable in the year dropdown')
@@ -135,16 +137,21 @@ CREATE TABLE IF NOT EXISTS `att_request` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
--- 5. Reminders. Reminder 3 is opt-in PER EMPLOYEE.
+-- 5. Reminders. Two only: R1 goes out on reminder_1_day, R2 on reminder_2_day.
+--
+--    Both quote the SAME deadline - the employee's last working day of that
+--    month, which is when the sheet is actually due. That date differs per
+--    employee because the work pattern does, so it is computed at send time and
+--    stored here on the row, not derived from a config day.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `att_reminder` (
   `reminder_id`  INT NOT NULL AUTO_INCREMENT,
   `emp_id`       VARCHAR(20) COLLATE utf8mb4_unicode_ci NOT NULL,
   `year`         SMALLINT NOT NULL,
   `month`        TINYINT  NOT NULL,
-  `reminder_no`  TINYINT  NOT NULL COMMENT '1 | 2 | 3',
-  `enabled`      TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'R3 exists as a row only once an admin adds it',
-  `due_date`     DATE DEFAULT NULL,
+  `reminder_no`  TINYINT  NOT NULL COMMENT '1 | 2',
+  `enabled`      TINYINT(1) NOT NULL DEFAULT 1,
+  `due_date`     DATE DEFAULT NULL COMMENT 'the last working day quoted in the mail',
   `sent_time`    DATETIME DEFAULT NULL,
   `sent_by`      VARCHAR(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
