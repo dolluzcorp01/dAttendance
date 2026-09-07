@@ -28,8 +28,24 @@
 //  into a wrong answer, and it is a record of an approved month rather than a
 //  working file.
 // ============================================================================
+const path = require("path");
+const fs = require("fs");
 const ExcelJS = require("exceljs");
 const cal = require("./attendanceCalendar");
+
+// The logo sits on C1:C2 exactly as the original workbook anchors it. It is the
+// white-panel build of DOLLUZ_Full_Logo.png: the raw asset has a black wordmark
+// on transparency, which disappears against the navy cell - the original solves
+// that with a white panel behind it, so this does the same.
+// Regenerate with the snippet in src/assets/img/README.md.
+const LOGO_PATH = path.join(__dirname, "..", "..", "assets", "img", "app_excel_logo.png");
+let LOGO_BUFFER = null;
+try {
+    LOGO_BUFFER = fs.readFileSync(LOGO_PATH);
+} catch (err) {
+    // A missing logo must not cost an employee their download.
+    console.warn("[workbook] logo not found at", LOGO_PATH, "- sheets will render without it");
+}
 
 // Palette lifted from the original workbook's theme (dk2 = 44546A) and its
 // conditional-formatting rules.
@@ -62,19 +78,17 @@ function paint(cell, { fill, color, size = 12, bold = true, wrap = false, numFmt
 }
 
 /**
- * Merge, then style EVERY cell in the range - not just the anchor.
+ * Merge a range and style it.
  *
- * Excel draws a merged region's outline from the borders of the cells on its
- * edges, so styling only the top-left leaves the right and bottom edges of the
- * box open. Filling the whole range also keeps the background solid if the
- * merge is ever undone.
+ * Only the anchor carries the style, which is how Excel itself writes these -
+ * the members of a merged range in the original workbook have no fill either.
+ * Excel paints the whole region, and draws its outline, from the anchor.
  */
 function mergeStyled(ws, r1, c1, r2, c2, style) {
     ws.mergeCells(r1, c1, r2, c2);
-    for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) paint(ws.getCell(r, c), style);
-    }
-    return ws.getCell(r1, c1);
+    const anchor = ws.getCell(r1, c1);
+    paint(anchor, style);
+    return anchor;
 }
 
 /**
@@ -124,7 +138,21 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     mergeStyled(ws, 1, 1, 1, 2,
         { fill: C.titleFill, color: C.titleText, size: 28, bold: false }).value = "Dolluz Corp";
 
-    mergeStyled(ws, 1, 3, 2, 3, { fill: C.header, color: C.accentText, size: 18 }); // C1:C2 spacer
+    // C1:C2 stays navy and the logo sits on top of it, exactly as the original
+    // does: the image carries its own white panel, so the navy shows around it.
+    mergeStyled(ws, 1, 3, 2, 3, { fill: C.header, color: C.accentText, size: 18 });
+    if (LOGO_BUFFER) {
+        const imgId = wb.addImage({ buffer: LOGO_BUFFER, extension: "png" });
+        // Column C is 16.57 chars wide (~121px); rows 1+2 are 37.5+30pt (~90px).
+        // Fit the square logo inside that with a little margin, and nudge it to
+        // the middle rather than letting it hug the top-left corner.
+        const boxW = 121, boxH = 90, side = 78;
+        ws.addImage(imgId, {
+            tl: { col: 2 + (boxW - side) / 2 / boxW, row: 0 + (boxH - side) / 2 / boxH },
+            ext: { width: side, height: side },
+            editAs: "oneCell",
+        });
+    }
 
     cell(1, 4).value = "Month";
     paint(cell(1, 4), { fill: C.header, size: 18 });
@@ -137,8 +165,10 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     // ── row 2 ──
     mergeStyled(ws, 2, 1, 2, 2, { fill: C.header, size: 22 }).value = "Attendance Sheet";
 
+    // The month name under "Month" takes the same grey band as the employee
+    // row, not the navy of the headers around it.
     cell(2, 4).value = MONTHS[month - 1];
-    paint(cell(2, 4), { fill: C.header, size: 18 });
+    paint(cell(2, 4), { fill: C.nameCell, size: 18 });
 
     days.forEach((d, i) => {
         const c = cell(2, FIRST_DAY_COL + i);
@@ -213,8 +243,14 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
         paint(c, { fill: C.header, size: 14 });
     });
 
-    // Keep the name and id on screen while scrolling a 31-column month.
-    ws.views = [{ state: "frozen", xSplit: 4, ySplit: 3, showGridLines: false }];
+    // The original carries the navy band across the summary columns on row 5
+    // too, even though those cells are empty. Leaving them unfilled ends the
+    // block in a ragged white notch under the summary.
+    for (let i = 0; i < 7; i++) paint(cell(5, sumCol + i), { fill: C.header, size: 14 });
+
+    // No frozen panes. The original has none, and a split at column D leaves a
+    // hard rule down the sheet that reads as a border that should not be there.
+    ws.views = [{ showGridLines: false }];
 
     const out = await wb.xlsx.writeBuffer();
     return Buffer.from(out);

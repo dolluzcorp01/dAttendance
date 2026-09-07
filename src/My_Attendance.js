@@ -140,6 +140,17 @@ export default function MyAttendance() {
         return s;
     }, [data]);
 
+    // Can the employee still change this month at all? The server is the
+    // authority - writeMarks() refuses these states before it writes anything -
+    // and this mirrors it so the page does not render controls that would be
+    // rejected. Anything false here means the action row is read-only.
+    const monthIsOpen = useMemo(() => {
+        if (!data) return false;
+        const f = data.flags;
+        if (f.before_joining || f.is_future_month) return false;
+        return !["submitted", "edit_requested", "approved"].includes(data.sheet.status);
+    }, [data]);
+
     const dirty = useMemo(() => {
         if (!data) return false;
         const saved = {};
@@ -285,6 +296,18 @@ export default function MyAttendance() {
                     <span className="dz-brand-name">dAttendance</span>
                 </div>
                 <div className="dz-topbar-right">
+                    {/* The SERVER's date, not the browser's. Every lock on this
+                        page - which days are editable, whether Submit is open -
+                        is decided against this, so showing the machine's own
+                        clock here would explain the wrong thing when the two
+                        disagree. Read-only for the same reason: the server
+                        ignores any date the client sends. */}
+                    {data?.today && (
+                        <div className="dz-today" title="The server's date. All date rules are applied against this.">
+                            <span className="dz-today-label">Today</span>
+                            <span className="dz-today-value">{prettyDate(data.today)}</span>
+                        </div>
+                    )}
                     {data?.leave_source === "dtime" && <span className="dz-pill dz-pill-navy">Leave from dTime</span>}
                     <div>
                         <div className="dz-user-name">{employee?.emp_name}</div>
@@ -344,16 +367,24 @@ export default function MyAttendance() {
                                 <span className="dz-pill dz-pill-grey">{data.pattern_label}</span>
                             </div>
                             <div className="dz-sheet-actions">
-                                <button
-                                    type="button"
-                                    className="dz-btn dz-btn-sm dz-btn-quiet"
-                                    disabled={busy || !data.days.some((d) => d.editable && !marks[d.date])}
-                                    onClick={markRemainingPresent}
-                                >
-                                    Mark remaining as present
-                                </button>
+                                {/* Marking and saving only exist while the month is
+                                    open to the employee. On a closed month they were
+                                    rendering greyed out, which offers something that
+                                    can never happen - see monthIsOpen. */}
+                                {monthIsOpen && (
+                                    <button
+                                        type="button"
+                                        className="dz-btn dz-btn-sm dz-btn-quiet"
+                                        disabled={busy || !data.days.some((d) => d.editable && !marks[d.date])}
+                                        onClick={markRemainingPresent}
+                                    >
+                                        Mark remaining as present
+                                    </button>
+                                )}
 
-                                {/* Download is only enabled once the sheet has been submitted. */}
+                                {/* Download stays visible while disabled on purpose: the
+                                    tooltip tells the employee it unlocks on submit, which
+                                    is guidance rather than a dead end. */}
                                 <button
                                     type="button"
                                     className="dz-btn dz-btn-sm dz-btn-ghost"
@@ -364,16 +395,22 @@ export default function MyAttendance() {
                                     Download
                                 </button>
 
-                                <button
-                                    type="button"
-                                    className="dz-btn dz-btn-sm dz-btn-ghost"
-                                    disabled={busy || !dirty}
-                                    onClick={save}
-                                >
-                                    Save
-                                </button>
+                                {monthIsOpen && (
+                                    <button
+                                        type="button"
+                                        className="dz-btn dz-btn-sm dz-btn-ghost"
+                                        disabled={busy || !dirty}
+                                        onClick={save}
+                                    >
+                                        Save
+                                    </button>
+                                )}
 
-                                {["submitted", "approved"].includes(data.sheet.status) ? (
+                                {/* Approved is final for the employee. No Request edit,
+                                    and no disabled Submit either - a month that is
+                                    finished should not offer a dead control. Only
+                                    Download stays live. */}
+                                {data.sheet.status === "submitted" ? (
                                     <button
                                         type="button"
                                         className="dz-btn dz-btn-sm dz-btn-dark"
@@ -384,7 +421,10 @@ export default function MyAttendance() {
                                     >
                                         Request edit ({data.sheet.edit_requests_left} left)
                                     </button>
-                                ) : (
+                                ) : monthIsOpen ? (
+                                    // Submit stays visible while disabled: its tooltip
+                                    // says what is still missing, so it is instruction,
+                                    // not a dead end.
                                     <button
                                         type="button"
                                         className="dz-btn dz-btn-sm dz-btn-primary"
@@ -399,7 +439,7 @@ export default function MyAttendance() {
                                     >
                                         Submit
                                     </button>
-                                )}
+                                ) : null}
                             </div>
                         </div>
 
@@ -480,19 +520,25 @@ export default function MyAttendance() {
                             <Legend cls="is-p" label="P — present" />
                             <Legend cls="is-l" label="L — leave" />
                             <Legend cls="is-h" label="H — holiday or week-off (set by admin)" />
-                            <span>Click a working day to choose Present or Leave.</span>
+                            {monthIsOpen && <span>Click a working day to choose Present or Leave.</span>}
                             {data.leave_source === "dtime" &&
                                 <span>L days come from approved leave in dTime and can't be changed here.</span>}
                         </div>
 
-                        <div className="dz-payroll-note">
-                            <InfoIcon />
-                            <span>
-                                Please fill and submit your attendance sheet without delay — your
-                                salary for {MONTHS[month - 1]} is processed from these numbers.
-                                A sheet that arrives after payroll has run is paid in the next cycle.
-                            </span>
-                        </div>
+                        {/* A nudge to fill the sheet, so it belongs only on a month
+                            that can still be filled. On a submitted or approved one
+                            it was telling the employee to do something they had
+                            already done. */}
+                        {monthIsOpen && (
+                            <div className="dz-payroll-note">
+                                <InfoIcon />
+                                <span>
+                                    Please fill and submit your attendance sheet without delay — your
+                                    salary for {MONTHS[month - 1]} is processed from these numbers.
+                                    A sheet that arrives after payroll has run is paid in the next cycle.
+                                </span>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -556,7 +602,8 @@ function Notices({ data, summary }) {
     else if (f.is_future_month) out.push(["grey", "This month hasn't started yet."]);
     else if (s === "edit_requested") out.push(["amber", "Your edit request is with the approver. The sheet stays locked until they respond."]);
     else if (s === "submitted") out.push(["green", "Submitted and waiting for approval. Raise an edit request if something is wrong."]);
-    else if (s === "approved") out.push(["green", "Approved. This month is closed."]);
+    else if (s === "approved") out.push(["green",
+        "Approved and closed. This month can no longer be changed — if something is wrong, ask an admin. You can still download the sheet."]);
     else if (s === "rejected") out.push(["red", "Your sheet was rejected. Correct it and submit again."]);
     else if (s === "edit_open") out.push(["amber", "Your edit request was accepted — the sheet is open again. Submit it once you're done."]);
     else if (f.is_current_month && !f.submit_window_open) {

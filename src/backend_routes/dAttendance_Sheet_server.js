@@ -285,6 +285,22 @@ async function writeMarks({ emp_id, year, month, marks, req }) {
         adhocDays: adhocRows.map((a) => a.work_date), holidays,
     });
     const sheetStatus = sheetRows[0]?.status || "not_started";
+
+    // Refuse a locked month BEFORE anything is written. isDateEditable() already
+    // rejects each posted date, but an empty marks object skips that loop
+    // entirely and the code below would still rewrite the system H rows on an
+    // approved sheet. Approved is final: payroll reads it, and a record that can
+    // still be touched afterwards is not a record.
+    const LOCKED_FOR_WRITES = ["submitted", "edit_requested", "approved"];
+    if (LOCKED_FOR_WRITES.includes(sheetStatus)) {
+        const e = new Error(
+            sheetStatus === "approved"
+                ? "This month has been approved and is closed."
+                : `This month is ${sheetStatus} and cannot be changed.`);
+        e.status = 409;
+        throw e;
+    }
+
     const byDate = new Map(calendar.days.map((d) => [d.date, d]));
 
     for (const [date, mark] of Object.entries(marks || {})) {
@@ -386,11 +402,9 @@ router.post("/submit", verifyJWT, async (req, res) => {
         return res.status(400).json({ error: "year and month are required" });
     }
     try {
+        // writeMarks() refuses a submitted, edit_requested or approved sheet
+        // before it writes anything, so by here the month is genuinely open.
         const r = await writeMarks({ emp_id: req.emp_id, year, month, marks, req });
-
-        if (["submitted", "edit_requested", "approved"].includes(r.sheetStatus)) {
-            return res.status(409).json({ error: `Sheet is already ${r.sheetStatus}` });
-        }
         if (!r.summary.complete) {
             return res.status(400).json({
                 error: `${r.summary.unmarked_days} working day(s) are still unmarked`,
@@ -464,7 +478,16 @@ router.post("/edit-request", verifyJWT, async (req, res) => {
             [req.emp_id, year, month]);
 
         if (!sheet) return res.status(404).json({ error: "No sheet to edit yet" });
-        if (!["submitted", "approved"].includes(sheet.status)) {
+        // Only a submitted sheet can be reopened. Once it is approved the month
+        // is final for the employee - payroll reads that number, and letting it
+        // move afterwards means the sheet no longer matches what was paid. A
+        // correction after approval is an admin job.
+        if (sheet.status === "approved") {
+            return res.status(409).json({
+                error: "This month has been approved and is closed. Ask an admin if a correction is needed.",
+            });
+        }
+        if (sheet.status !== "submitted") {
             return res.status(409).json({ error: `Sheet is ${sheet.status} - nothing to reopen` });
         }
         if (sheet.edit_requests_used >= cfg.editLimit) {

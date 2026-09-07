@@ -1,5 +1,28 @@
 .dz-att-shell { min-height: 100vh; background: var(--dz-paper); }
 
+/* Server date in the top bar. Sits in its own boxed chip so it does not read
+   as part of the employee's name block next to it. */
+.dz-today {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--dz-line);
+  border-radius: 6px;
+  background: #fff;
+  white-space: nowrap;
+}
+.dz-today-label { font-size: 11px; color: var(--dz-muted); }
+.dz-today-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dz-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+/* On a phone the name and Sign out matter more than the date. */
+@media (max-width: 560px) { .dz-today { display: none; } }
+
 .dz-year-picker { display: flex; align-items: center; gap: 10px; }
 .dz-year-picker span { font-size: 12.5px; color: var(--dz-muted); }
 .dz-year-picker .dz-select { width: 110px; padding: 6px 8px; font-size: 13px; }
@@ -10,6 +33,15 @@
   cursor: pointer; border: 1px solid var(--dz-line); background: #fff; color: var(--dz-ink);
 }
 .dz-month-btn.is-active { background: var(--dz-navy); border-color: var(--dz-navy); color: #fff; font-weight: 600; }
+
+/* The global focus ring is orange at +1px offset, which haloes the selected
+   month in a colour that fights its navy fill and reads as a rendering fault.
+   Keyboard users still need the indicator, so move it inside the button and
+   switch it to white, where it reads as deliberate against the navy. */
+.dz-month-btn.is-active:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -4px;
+}
 
 .dz-loading { padding: 40px; text-align: center; color: var(--dz-muted); font-size: 13px; }
 
