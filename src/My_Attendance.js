@@ -106,9 +106,17 @@ export default function MyAttendance() {
     }, []);
 
     // ── load a month ───────────────────────────────────────────────────────
-    const loadMonth = useCallback(async (y, m) => {
+    // silent    - refresh the numbers underneath the sheet instead of tearing
+    //             it down behind the loading placeholder. The placeholder is
+    //             right for a first load or a month switch, where there is
+    //             nothing correct to show yet; after a save or a request it
+    //             unmounts the whole card and reads as a page reload.
+    // keepEdits - carry unsaved grid clicks across a refresh that was not
+    //             about them. Raising a support claim must not silently throw
+    //             away marks the employee has made but not yet saved.
+    const loadMonth = useCallback(async (y, m, { silent = false, keepEdits = false } = {}) => {
         if (!y || !m) return;
-        setLoading(true);
+        if (!silent) setLoading(true);
         setError("");
         try {
             const res = await apiJson(`/api/sheet/month?year=${y}&month=${m}`);
@@ -117,7 +125,21 @@ export default function MyAttendance() {
             // only difference between this and the server.
             const seed = {};
             for (const d of res.days) if (d.day_type === "WORK" && d.mark) seed[d.date] = d.mark;
-            setMarks(seed);
+            setMarks((prev) => {
+                if (!keepEdits) return seed;
+                // Local marks are always a superset of the server's - chooseMark
+                // only ever sets a value, it never clears one - so laying them
+                // over the seed cannot resurrect a mark the employee removed.
+                // A date the server no longer calls an editable working day is
+                // dropped: the server is the authority on that.
+                const byDate = new Map(res.days.map((d) => [d.date, d]));
+                const next = { ...seed };
+                for (const [date, mark] of Object.entries(prev)) {
+                    const day = byDate.get(date);
+                    if (day && day.day_type === "WORK" && day.editable) next[date] = mark;
+                }
+                return next;
+            });
         } catch (err) {
             setData(null);
             setError(err.message);
@@ -233,7 +255,7 @@ export default function MyAttendance() {
             });
             setSupportForm(null);
             flash("Sent to your approver");
-            await loadMonth(year, month);
+            await loadMonth(year, month, { silent: true, keepEdits: true });
         } catch (err) {
             flash(err.message);
         } finally { setBusy(false); }
@@ -248,7 +270,7 @@ export default function MyAttendance() {
             });
             setSupportAt(null);
             flash("Claim withdrawn");
-            await loadMonth(year, month);
+            await loadMonth(year, month, { silent: true, keepEdits: true });
         } catch (err) {
             flash(err.message);
         } finally { setBusy(false); }
@@ -302,7 +324,7 @@ export default function MyAttendance() {
                 body: JSON.stringify({ year, month, marks }),
             });
             flash("Sheet saved");
-            await loadMonth(year, month);
+            await loadMonth(year, month, { silent: true });
         } catch (err) {
             flash(err.message);
         } finally { setBusy(false); }
@@ -317,7 +339,7 @@ export default function MyAttendance() {
                 body: JSON.stringify({ year, month, marks }),
             });
             flash(res.approver_id ? `Submitted to ${res.approver_id}` : "Submitted for approval");
-            await loadMonth(year, month);
+            await loadMonth(year, month, { silent: true });
         } catch (err) {
             flash(err.message);
         } finally { setBusy(false); }
@@ -333,7 +355,7 @@ export default function MyAttendance() {
             });
             flash("Edit request sent");
             setEditModal(null);
-            await loadMonth(year, month);
+            await loadMonth(year, month, { silent: true });
         } catch (err) {
             flash(err.message);
         } finally { setBusy(false); }
