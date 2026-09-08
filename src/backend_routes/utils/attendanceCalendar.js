@@ -55,7 +55,10 @@ const dateRange = (startYmd, endYmd) => {
 };
 
 // ---------------------------------------------------------------------------
-// Work patterns. Three, and only three.
+// Work patterns. MON_FRI and MON_SAT are the two base weeks; adhoc working days
+// now layer on top of either of them (see buildMonthCalendar). MON_ADHOC is
+// retained only so historical rows stay valid - it behaves exactly like MON_FRI
+// plus its adhoc days.
 // ---------------------------------------------------------------------------
 const PATTERNS = {
     MON_FRI:   { label: "Mon - Fri",           weekendDow: [0, 6] },
@@ -137,9 +140,12 @@ function buildMonthCalendar({ employee, year, month, pattern, adhocDays = [], ho
             continue;
         }
 
-        // Adhoc wins over week-off and holiday. This is the whole point of the
-        // pattern: "work this specific day even though it is off".
-        if (usePattern === "MON_ADHOC" && adhoc.has(date)) {
+        // Adhoc wins over week-off and holiday - "work this specific day even
+        // though it is off". Adhoc days layer on top of ANY pattern: an admin can
+        // add a working Saturday to a Mon-Fri week, or a working Sunday to a
+        // Mon-Sat week. A day that is already a working day is never stored as
+        // adhoc, so this only ever promotes an otherwise-off day.
+        if (adhoc.has(date)) {
             adhoc_used++;
             working++;
             const overrode = weekend.has(dow) ? "week-off"
