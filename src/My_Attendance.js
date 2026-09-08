@@ -509,15 +509,21 @@ export default function MyAttendance() {
                         </div>
 
                         {/* ── summary block, same fields as the Excel ── */}
+                        {/* These seven labels, in this order, are the summary
+                            headers of the .xlsx - see SUMMARY_HEADERS in
+                            utils/attendanceWorkbook.js. Title Case with the
+                            minor word ("in") left lowercase, exactly as the
+                            original workbook writes them. Change one, change
+                            both, or the download stops matching the screen. */}
                         <div className="dz-stats">
-                            <Stat label="Present"            value={summary.present_days} tone="green" />
-                            <Stat label="Leave taken"        value={summary.leave_days}
+                            <Stat label="Present"             value={summary.present_days} tone="green" />
+                            <Stat label="Leave Taken"         value={summary.leave_days}
                                   tone={summary.leave_days > summary.allowed_leave ? "red" : "plain"} />
-                            <Stat label="Allowed leave"      value={summary.allowed_leave} />
-                            <Stat label="Days in month"      value={summary.days_in_month} />
-                            <Stat label="Total working days" value={summary.working_days} />
-                            <Stat label="Worked days"        value={summary.worked_days} />
-                            <Stat label="Total day off"      value={summary.days_off} />
+                            <Stat label="Allowed Leave"       value={summary.allowed_leave} />
+                            <Stat label="Total Days in Month" value={summary.days_in_month} />
+                            <Stat label="Total Working Days"  value={summary.working_days} />
+                            <Stat label="Worked Days"         value={summary.worked_days} />
+                            <Stat label="Total Day Off"       value={summary.days_off} />
                         </div>
 
                         <div className="dz-legend">
