@@ -29,6 +29,15 @@ const q = (db, sql, params = []) =>
         db.query(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)))
     );
 
+// today minus N days, as YYYY-MM-DD. attendanceCalendar.js has no addDays and
+// must stay byte-for-byte identical to dAdmin's copy of it - the two apps build
+// the same Excel off it - so this small helper lives here instead of there.
+// UTC arithmetic on a plain date: no DST, no zone, no drift.
+const minusDays = (ymd, n) => {
+    const [y, m, d] = ymd.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10);
+};
+
 const todayYmd = () => {
     // Asia/Kolkata. The pool is set to +05:30; keep the app clock in the same
     // zone or a sheet saved late at night lands on the wrong day.
@@ -57,6 +66,10 @@ const loadConfig = async () => {
         fillForwardFromDay: Math.min(31, num(c.fill_forward_from_day, 24, 1)),
         leaveSource: c.leave_source || "manual",
         minYear: num(c.min_year, 2018, 1970),
+        supportEnabled: c.support_request_enabled !== "0",
+        // 0 means "no window" - a claim may be raised however long after the
+        // day. Anything above 0 is a deadline measured from the day itself.
+        supportDays: num(c.support_request_days, 45, 0),
     };
 };
 
@@ -136,6 +149,20 @@ router.get("/month", verifyJWT, async (req, res) => {
         const sheet = sheetRows[0] || null;
         const sheetStatus = sheet?.status || "not_started";
 
+        // Weekend-support claims, keyed by date. Ordered oldest first so a
+        // date that was rejected and then re-raised ends up showing the LATEST
+        // attempt - which is the one the employee cares about.
+        const supportRows = await q(datt, `
+            SELECT r.request_id, DATE_FORMAT(r.work_date,'%Y-%m-%d') AS work_date,
+                   r.day_portion, r.status, r.reason, r.decision_note,
+                   r.raised_time, r.decided_time
+              FROM att_request r
+              JOIN att_sheet   s ON s.sheet_id = r.sheet_id
+             WHERE r.request_type = 'support' AND s.emp_id = ?
+               AND r.work_date BETWEEN ? AND ?
+          ORDER BY r.raised_time ASC`, [req.emp_id, monthStart, monthEnd]);
+        const support = Object.fromEntries(supportRows.map((r) => [r.work_date, r]));
+
         // Saved marks
         let marks = {};
         if (sheet) {
@@ -172,10 +199,25 @@ router.get("/month", verifyJWT, async (req, res) => {
 
         // Per-day editability, computed server-side and echoed so the UI never
         // has to guess. The same predicate re-runs on save.
+        const supportCutoff = cfg.supportDays > 0 ? minusDays(today, cfg.supportDays) : null;
+
         const days = calendar.days.map((d) => ({
             ...d,
             mark: d.day_type === "WORK" ? (marks[d.date] || null) : "H",
             approved_leave: leaveDates.has(d.date),
+            support: support[d.date] || null,
+            // Whether the H cell offers the control at all. The same predicate
+            // re-runs on POST /support-request - this is only so the page does
+            // not render a button the server would refuse.
+            can_request_support:
+                cfg.supportEnabled &&
+                (d.day_type === "WEEKOFF" || d.day_type === "HOLIDAY") &&
+                // Future off-days are claimable: an employee who already knows
+                // they are covering a holiday can say so ahead of it, rather
+                // than having to remember afterwards.
+                (!supportCutoff || d.date >= supportCutoff) &&
+                sheetStatus !== "approved" &&
+                !["pending", "approved"].includes(support[d.date]?.status),
             editable:
                 d.day_type === "WORK" &&
                 !(cfg.leaveSource === "dtime" && leaveDates.has(d.date)) &&
@@ -223,6 +265,7 @@ router.get("/month", verifyJWT, async (req, res) => {
             approved_leave: approvedLeave,
             leave_source: cfg.leaveSource,
             leave_mismatch: leaveMismatch,
+            support,
             sheet: {
                 status: sheetStatus,
                 edit_requests_used: sheet?.edit_requests_used || 0,
@@ -241,6 +284,8 @@ router.get("/month", verifyJWT, async (req, res) => {
                 // Download is enabled only once the sheet has been submitted.
                 can_download: ["submitted", "edit_requested", "edit_open", "approved"].includes(sheetStatus),
                 fill_forward_from_day: cfg.fillForwardFromDay,
+                support_enabled: cfg.supportEnabled,
+                support_request_days: cfg.supportDays,
             },
         });
     } catch (err) {
@@ -360,6 +405,27 @@ async function writeMarks({ emp_id, year, month, marks, req }) {
     };
 }
 
+// reporting_manager, else the first active Admin. Both the month approval and
+// a weekend-support claim route the same way, so this lives in one place - two
+// copies would eventually disagree about who decides what.
+const resolveApprover = async (emp) => {
+    let approver = emp.reporting_manager || null;
+    if (approver) {
+        const ok = await q(dadmin,
+            `SELECT emp_id FROM employee WHERE emp_id = ? AND active = 1 AND deleted_time IS NULL`,
+            [approver]);
+        if (!ok.length) approver = null;
+    }
+    if (!approver) {
+        const admins = await q(dadmin, `
+            SELECT emp_id FROM employee
+             WHERE emp_access_level = 'Admin' AND active = 1 AND deleted_time IS NULL
+          ORDER BY emp_id ASC LIMIT 1`);
+        approver = admins[0]?.emp_id || null;
+    }
+    return approver;
+};
+
 const logActivity = (emp_id, year, month, action, detail, actor, ip) =>
     q(datt, `INSERT INTO att_activity (emp_id, year, month, action, detail, actor_id, ip_address)
              VALUES (?, ?, ?, ?, ?, ?, ?)`, [emp_id, year, month, action, detail, actor, ip]);
@@ -420,21 +486,7 @@ router.post("/submit", verifyJWT, async (req, res) => {
             });
         }
 
-        // reporting_manager, else the first active Admin. Frozen on the sheet.
-        let approver = r.emp.reporting_manager || null;
-        if (approver) {
-            const ok = await q(dadmin,
-                `SELECT emp_id FROM employee WHERE emp_id = ? AND active = 1 AND deleted_time IS NULL`,
-                [approver]);
-            if (!ok.length) approver = null;
-        }
-        if (!approver) {
-            const admins = await q(dadmin, `
-                SELECT emp_id FROM employee
-                 WHERE emp_access_level = 'Admin' AND active = 1 AND deleted_time IS NULL
-              ORDER BY emp_id ASC LIMIT 1`);
-            approver = admins[0]?.emp_id || null;
-        }
+        const approver = await resolveApprover(r.emp);
 
         await q(datt, `
             UPDATE att_sheet
@@ -588,4 +640,189 @@ router.get("/download", verifyJWT, async (req, res) => {
     }
 });
 
+// ---------------------------------------------------------------------------
+// Weekend / holiday support
+//
+// The employee worked on a day the calendar calls off. They claim it here; an
+// admin decides it in dAdmin. On approval dAdmin inserts an att_adhoc_day row,
+// which attendanceCalendar already ranks above WEEKOFF and HOLIDAY on every
+// pattern - so the day resolves to WORK and is written P, and every total that
+// reads off the calendar follows with no special case anywhere.
+//
+// Nothing here writes to att_sheet_day. A claim is a request, not a mark; the
+// day stays H on the sheet until somebody approves it.
+// ---------------------------------------------------------------------------
+
+// POST /support-request   body: { year, month, date, portion, reason }
+router.post("/support-request", verifyJWT, async (req, res) => {
+    const { year, month, date, portion, reason } = req.body || {};
+    if (!Number.isInteger(year) || !Number.isInteger(month)) {
+        return res.status(400).json({ error: "year and month are required" });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) {
+        return res.status(400).json({ error: "A valid date is required" });
+    }
+    if (!["full", "half"].includes(portion)) {
+        return res.status(400).json({ error: "Choose a full day or a half day" });
+    }
+    const why = String(reason || "").trim();
+    if (!why) return res.status(400).json({ error: "Tell the approver what you worked on" });
+    if (why.length > 500) return res.status(400).json({ error: "Keep the reason under 500 characters" });
+
+    try {
+        const emp = await loadEmployee(req.emp_id);
+        if (!emp) return res.status(403).json({ error: "Account inactive" });
+        const cfg = await loadConfig();
+        if (!cfg.supportEnabled) {
+            return res.status(403).json({ error: "Weekend support requests are turned off" });
+        }
+        const today = todayYmd();
+
+        const monthStart = cal.toYmd(year, month, 1);
+        const monthEnd = cal.toYmd(year, month, cal.daysInMonth(year, month));
+        if (date < monthStart || date > monthEnd) {
+            return res.status(400).json({ error: `${date} is not in ${year}-${month}` });
+        }
+        // A future off-day is allowed - the claim is "I am working this day",
+        // raised ahead of time. Only the BACKWARD window is enforced, and it
+        // cannot bite a future date.
+        if (cfg.supportDays > 0 && date < minusDays(today, cfg.supportDays)) {
+            return res.status(403).json({
+                error: `Claims close ${cfg.supportDays} days after the day itself`,
+            });
+        }
+
+        const [patternRows, adhocRows, holidays, sheetRows] = await Promise.all([
+            q(datt, `SELECT pattern FROM att_work_pattern WHERE emp_id = ? AND year = ? AND month = ?`,
+              [req.emp_id, year, month]),
+            q(datt, `SELECT DATE_FORMAT(work_date,'%Y-%m-%d') AS work_date
+                       FROM att_adhoc_day WHERE emp_id = ? AND work_date BETWEEN ? AND ?`,
+              [req.emp_id, monthStart, monthEnd]),
+            q(dtime, `SELECT DATE_FORMAT(holiday_date,'%Y-%m-%d') AS holiday_date,
+                             DATE_FORMAT(COALESCE(holiday_end, holiday_date),'%Y-%m-%d') AS holiday_end,
+                             holiday_name, holiday_for, holiday_value
+                        FROM holidays
+                       WHERE holiday_date <= ? AND COALESCE(holiday_end, holiday_date) >= ?`,
+              [monthEnd, monthStart]),
+            q(datt, `SELECT sheet_id, status, approver_id FROM att_sheet
+                      WHERE emp_id = ? AND year = ? AND month = ? LIMIT 1`, [req.emp_id, year, month]),
+        ]);
+
+        const calendar = cal.buildMonthCalendar({
+            employee: emp, year, month,
+            pattern: patternRows[0]?.pattern || cal.DEFAULT_PATTERN,
+            adhocDays: adhocRows.map((a) => a.work_date), holidays,
+        });
+        const day = calendar.days.find((d) => d.date === date);
+        if (!day) return res.status(400).json({ error: `${date} is not in ${year}-${month}` });
+
+        // Only an off-day can be claimed. A WORK day is already the employee's
+        // to mark P, and NON_EMPLOYED predates the joining date.
+        if (day.day_type === "WORK") {
+            return res.status(400).json({
+                error: day.adhoc
+                    ? "That day is already a working day"
+                    : "That is a normal working day - mark it P on the sheet",
+            });
+        }
+        if (day.day_type === "NON_EMPLOYED") {
+            return res.status(400).json({ error: "That day is before your joining date" });
+        }
+
+        const sheetStatus = sheetRows[0]?.status || "not_started";
+        if (sheetStatus === "approved") {
+            return res.status(409).json({ error: "This month has been approved and is closed." });
+        }
+
+        // One live claim per date. A rejected one may be raised again - an
+        // approver saying no to a thin reason should not close the day forever.
+        const [live] = await q(datt, `
+            SELECT r.request_id, r.status
+              FROM att_request r JOIN att_sheet s ON s.sheet_id = r.sheet_id
+             WHERE r.request_type = 'support' AND s.emp_id = ? AND r.work_date = ?
+               AND r.status IN ('pending','approved')
+             LIMIT 1`, [req.emp_id, date]);
+        if (live) {
+            return res.status(409).json({
+                error: live.status === "approved"
+                    ? "That day has already been approved as a working day"
+                    : "You already have a pending claim on that day",
+            });
+        }
+
+        // att_request hangs off a sheet, and the month may never have been
+        // opened. Creating the draft here is honest: the month is now in play.
+        let sheetId = sheetRows[0]?.sheet_id;
+        if (!sheetId) {
+            const r = await q(datt,
+                `INSERT INTO att_sheet (emp_id, year, month, status) VALUES (?, ?, ?, 'draft')`,
+                [req.emp_id, year, month]);
+            sheetId = r.insertId;
+        }
+
+        // Route it the way a month submission routes. Only fill approver_id if
+        // the sheet has none - submit freezes it, and this must not move it.
+        const approver = await resolveApprover(emp);
+        if (!sheetRows[0]?.approver_id && approver) {
+            await q(datt, `UPDATE att_sheet SET approver_id = ? WHERE sheet_id = ? AND approver_id IS NULL`,
+                [approver, sheetId]);
+        }
+
+        const ins = await q(datt, `
+            INSERT INTO att_request (sheet_id, request_type, work_date, day_portion,
+                                     status, reason, raised_by)
+            VALUES (?, 'support', ?, ?, 'pending', ?, ?)`,
+            [sheetId, date, portion, why, req.emp_id]);
+
+        await logActivity(req.emp_id, year, month, "Support request",
+            `${date} (${day.label}) - ${portion === "half" ? "half day" : "full day"}: ${why}`,
+            req.emp_id, req.ip);
+
+        res.json({
+            success: true,
+            request_id: ins.insertId,
+            approver_id: approver,
+            support: {
+                request_id: ins.insertId, work_date: date, day_portion: portion,
+                status: "pending", reason: why, decision_note: null,
+            },
+        });
+    } catch (err) {
+        console.error("[sheet] /support-request", err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+// POST /support-request/cancel   body: { request_id }
+// Withdrawing a claim the approver has not looked at yet. Pending only - a
+// decided claim is a record, and the employee does not get to erase it.
+router.post("/support-request/cancel", verifyJWT, async (req, res) => {
+    const id = Number(req.body?.request_id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "request_id is required" });
+    try {
+        const [row] = await q(datt, `
+            SELECT r.request_id, r.status, DATE_FORMAT(r.work_date,'%Y-%m-%d') AS work_date,
+                   s.emp_id, s.year, s.month
+              FROM att_request r JOIN att_sheet s ON s.sheet_id = r.sheet_id
+             WHERE r.request_id = ? AND r.request_type = 'support' LIMIT 1`, [id]);
+        if (!row) return res.status(404).json({ error: "Request not found" });
+        if (row.emp_id !== req.emp_id) return res.status(403).json({ error: "Not your request" });
+        if (row.status !== "pending") {
+            return res.status(409).json({ error: `That claim is already ${row.status}` });
+        }
+
+        // Deleted, not flagged: nothing was decided, so there is nothing to
+        // keep. The activity line below is what survives.
+        await q(datt, `DELETE FROM att_request WHERE request_id = ?`, [id]);
+        await logActivity(req.emp_id, row.year, row.month, "Support request",
+            `Withdrew the claim on ${row.work_date}`, req.emp_id, req.ip);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("[sheet] /support-request/cancel", err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
 module.exports = router;
+

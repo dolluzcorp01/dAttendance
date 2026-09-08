@@ -84,17 +84,31 @@
 .dz-grid-name { font-size: 12.5px; font-weight: 600; color: var(--dz-navy); }
 .dz-grid-name span { display: block; font-size: 10.5px; color: var(--dz-muted); font-weight: 400;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.dz-grid-mark-cell { padding: 0; }
+/* The day colour lives on the CELL, not on the button inside it.
+   The button is only as tall as its own text plus padding, while the row is
+   as tall as the two-line employee name beside it - so a button-painted cell
+   left a white band above and below the fill. Painting the td cannot get that
+   wrong whatever the row height turns out to be.
+   height:1px is the table-cell trick: a td never actually shrinks below its
+   content, but a definite height is what lets the button's height:100% below
+   resolve against the row, so the click target fills the block too. */
+.dz-grid-mark-cell { padding: 0; height: 1px; }
+.dz-grid-mark-cell.is-p { background: var(--dz-green-bg); }
+.dz-grid-mark-cell.is-l { background: var(--dz-red-bg); }
+.dz-grid-mark-cell.is-h { background: #F2F0EC; }
 
 .dz-mark {
-  width: 100%; border: none; background: #fff; color: var(--dz-muted);
+  display: block;
+  width: 100%; height: 100%;
+  border: none; background: transparent; color: var(--dz-muted);
   font-size: 13px; font-weight: 700; padding: 9px 0; cursor: pointer;
+  box-sizing: border-box;
 }
-.dz-mark.is-p { background: var(--dz-green-bg); color: var(--dz-green); }
-.dz-mark.is-l { background: var(--dz-red-bg);   color: var(--dz-red); }
-.dz-mark.is-h { background: #F2F0EC;            color: var(--dz-grey); }
+.dz-mark.is-p { color: var(--dz-green); }
+.dz-mark.is-l { color: var(--dz-red); }
+.dz-mark.is-h { color: var(--dz-grey); }
 .dz-mark.is-locked { cursor: not-allowed; }
-.dz-mark.is-locked:not(.is-h) { opacity: .5; }
+.dz-mark.is-locked:not(.is-h) { opacity: .55; }
 .dz-mark:not(.is-locked):hover { box-shadow: inset 0 0 0 2px var(--dz-line); }
 .dz-mark.is-open { box-shadow: inset 0 0 0 2px var(--dz-cta); }
 
@@ -209,6 +223,138 @@
   background: var(--dz-navy); color: #fff; padding: 10px 20px; border-radius: 7px;
   font-size: 13px; z-index: 90; box-shadow: 0 8px 24px rgba(13, 27, 42, .3);
 }
+
+/* ── weekend / holiday support ─────────────────────────────────────────────
+   A marker in the top-right corner of a day cell. It has to sit ON the cell
+   rather than inside .dz-mark, because an off-day's mark button is disabled
+   and a disabled button swallows clicks on its children. */
+.dz-grid-mark-cell { position: relative; }
+
+.dz-support-dot {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 12px; height: 12px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 1;
+  cursor: pointer;
+  /* An information affordance, not an alert. Light fill with the colour in
+     the glyph and the ring reads as "there is something here" - a solid dark
+     dot on every off-day read as an error state instead.
+     Serif for the "i": it carries a proper dot at 10px, where the UI font's
+     tittle nearly vanishes. */
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 8.5px;
+  font-weight: 700;
+  background: var(--dz-blue-soft);
+  color: var(--dz-blue);
+  border: 1px solid var(--dz-blue-line);
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.dz-support-dot:hover { transform: scale(1.3); background: #C4DCF2; }
+.dz-support-dot:focus-visible,
+.dz-support-dot.is-open { box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--dz-cta); }
+
+/* A claim already exists - the colour stops being an offer and becomes status.
+   Same soft treatment so the four states read as one family. */
+.dz-support-dot.is-pending {
+  background: var(--dz-amber-bg); color: var(--dz-amber); border-color: #EBDCB8;
+}
+.dz-support-dot.is-approved {
+  background: var(--dz-green-bg); color: var(--dz-green); border-color: #BEE3D0;
+}
+.dz-support-dot.is-rejected {
+  background: var(--dz-red-bg); color: var(--dz-red); border-color: #E7C7C3;
+}
+/* The status glyphs are UI marks, not letters - keep them in the UI font. */
+.dz-support-dot.is-pending,
+.dz-support-dot.is-approved,
+.dz-support-dot.is-rejected { font-family: inherit; font-size: 8px; }
+
+.dz-support-pop {
+  position: fixed;
+  z-index: 80;
+  background: #fff;
+  border: 1px solid var(--dz-line);
+  border-radius: 9px;
+  box-shadow: 0 12px 34px rgba(13, 27, 42, .2);
+  overflow: hidden;
+}
+.dz-support-pop-head {
+  padding: 9px 12px;
+  background: #FAF8F5;
+  border-bottom: 1px solid var(--dz-line-2);
+}
+.dz-support-pop-date { display: block; font-size: 12.5px; font-weight: 600; color: var(--dz-ink); }
+.dz-support-pop-label { display: block; font-size: 11px; color: var(--dz-muted); margin-top: 1px; }
+
+.dz-support-pop-body { padding: 11px 12px 12px; }
+.dz-support-pop-lead { margin: 0 0 10px; font-size: 12px; line-height: 1.55; color: var(--dz-muted); }
+.dz-support-wide { width: 100%; justify-content: center; }
+
+.dz-support-chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.dz-support-chip em { font-style: normal; font-weight: 400; opacity: .8; }
+.dz-support-chip.is-pending  { background: var(--dz-amber-bg); color: var(--dz-amber); }
+.dz-support-chip.is-approved { background: var(--dz-green-bg); color: var(--dz-green); }
+.dz-support-chip.is-rejected { background: var(--dz-red-bg);   color: var(--dz-red); }
+
+.dz-support-pop-reason {
+  margin: 9px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dz-ink);
+  /* A long reason must not stretch the bubble past its fixed height. */
+  max-height: 54px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.dz-support-pop-note {
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #F4F2EE;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--dz-muted);
+  overflow-wrap: anywhere;
+}
+.dz-support-pop-body .dz-btn { margin-top: 10px; }
+
+/* Full day / half day */
+.dz-portion-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.dz-portion {
+  flex: 1;
+  padding: 10px 11px;
+  text-align: left;
+  border: 1px solid var(--dz-line);
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.dz-portion:hover { border-color: var(--dz-muted); }
+.dz-portion.is-on { border-color: var(--dz-cta); background: #FEF6F1; box-shadow: inset 0 0 0 1px var(--dz-cta); }
+.dz-portion-label { display: block; font-size: 13px; font-weight: 600; color: var(--dz-ink); }
+.dz-portion-hint { display: block; font-size: 11px; color: var(--dz-muted); margin-top: 2px; }
+
+/* The read-back on the confirm step */
+.dz-support-review { margin: 0; font-size: 12.5px; }
+.dz-support-review > div {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--dz-line-2);
+}
+.dz-support-review > div:last-child { border-bottom: none; }
+.dz-support-review dt { flex: 0 0 78px; color: var(--dz-muted); }
+.dz-support-review dd { margin: 0; color: var(--dz-ink); font-weight: 500; overflow-wrap: anywhere; }
 
 @media (max-width: 640px) {
   .dz-sheet-actions { width: 100%; }

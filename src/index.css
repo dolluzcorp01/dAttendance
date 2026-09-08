@@ -18,6 +18,12 @@
   --dz-amber-bg: #FBF3E0;
   --dz-grey:     #8A9099;
   --dz-grey-bg:  #EFEFEF;
+  /* Informational blue. Already in use by the payroll note on My attendance;
+     named here so the weekend-support marker matches it instead of guessing. */
+  --dz-blue:      #255076;
+  --dz-blue-bg:   #EEF3F8;
+  --dz-blue-soft: #D6E7F6;   /* strong enough to read on the grey H cell */
+  --dz-blue-line: #AFCFE9;
 
   --dz-font: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --dz-radius: 8px;

@@ -39,6 +39,24 @@ const MARK_OPTIONS = [
     { value: "P", label: "Present", hint: "A normal working day", cls: "is-p" },
     { value: "L", label: "Leave",   hint: "Counts towards your allowed leave", cls: "is-l" },
 ];
+// How much of the off-day was worked. Both are recorded as a full P once
+// approved - att_sheet_day.day_status has no half-day value and payroll counts
+// present days as whole numbers - so "half" is a note to the approver about
+// what happened, not a 0.5 in the totals.
+const PORTIONS = [
+    { value: "full", label: "Full day", hint: "A normal working day's hours" },
+    { value: "half", label: "Half day", hint: "A few hours, or half a shift" },
+];
+
+// The corner marker on a day cell, by claim status. No entry means no claim
+// yet, and the cell offers a "+".
+const SUPPORT_GLYPH = { pending: "•", approved: "\u2713", rejected: "!" };
+const SUPPORT_LABEL = {
+    pending: "Weekend support claim — waiting for your approver",
+    approved: "Weekend support approved — counted as a working day",
+    rejected: "Weekend support claim was rejected",
+};
+
 const MARK_LABEL = { P: "Present", L: "Leave", H: "Holiday or week-off" };
 
 const prettyDate = (ymd) => {
@@ -61,6 +79,11 @@ export default function MyAttendance() {
     const [toast, setToast] = useState(null);
     const [editModal, setEditModal] = useState(null);   // reason text, or null
     const [confirmSubmit, setConfirmSubmit] = useState(false);
+    // The open support bubble: { day, top, bottom, left }. Same portal
+    // trick as the P/L picker - see MarkPicker.
+    const [supportAt, setSupportAt] = useState(null);
+    // The claim being written: { day, portion, reason, step }.
+    const [supportForm, setSupportForm] = useState(null);
     const [error, setError] = useState("");
 
     // The open P/L picker: { date, top, left, width }. Screen coordinates,
@@ -180,6 +203,57 @@ export default function MyAttendance() {
         setPicker({ date: day.date, top: r.top, bottom: r.bottom, left: r.left });
     };
 
+    // ── weekend / holiday support ──────────────────────────────────────────
+    const openSupport = (day, event) => {
+        event.stopPropagation();
+        if (supportAt?.day.date === day.date) { setSupportAt(null); return; }
+        const r = event.currentTarget.getBoundingClientRect();
+        setPicker(null);
+        setSupportAt({ day, top: r.top, bottom: r.bottom, left: r.left });
+    };
+
+    const startSupportClaim = (day) => {
+        setSupportAt(null);
+        // A claim on a day that has not happened yet is a statement of intent,
+        // not a record. Same request either way - only the wording changes.
+        setSupportForm({
+            day, portion: "full", reason: "", step: "form",
+            future: day.date > data.today,
+        });
+    };
+
+    const sendSupportClaim = async () => {
+        if (!supportForm) return;
+        const { day, portion, reason } = supportForm;
+        setBusy(true);
+        try {
+            await apiJson("/api/sheet/support-request", {
+                method: "POST",
+                body: JSON.stringify({ year, month, date: day.date, portion, reason: reason.trim() }),
+            });
+            setSupportForm(null);
+            flash("Sent to your approver");
+            await loadMonth(year, month);
+        } catch (err) {
+            flash(err.message);
+        } finally { setBusy(false); }
+    };
+
+    const withdrawSupportClaim = async (requestId) => {
+        setBusy(true);
+        try {
+            await apiJson("/api/sheet/support-request/cancel", {
+                method: "POST",
+                body: JSON.stringify({ request_id: requestId }),
+            });
+            setSupportAt(null);
+            flash("Claim withdrawn");
+            await loadMonth(year, month);
+        } catch (err) {
+            flash(err.message);
+        } finally { setBusy(false); }
+    };
+
     const chooseMark = (date, value) => {
         setMarks((m) => ({ ...m, [date]: value }));
         setPicker(null);
@@ -189,8 +263,8 @@ export default function MyAttendance() {
     // The grid scrolls horizontally, so a scroll must dismiss rather than
     // leave the menu pointing at the wrong day.
     useEffect(() => {
-        if (!picker) return;
-        const close = () => setPicker(null);
+        if (!picker && !supportAt) return;
+        const close = () => { setPicker(null); setSupportAt(null); };
         const onKey = (e) => { if (e.key === "Escape") close(); };
         window.addEventListener("scroll", close, true);
         window.addEventListener("resize", close);
@@ -200,10 +274,15 @@ export default function MyAttendance() {
             window.removeEventListener("resize", close);
             window.removeEventListener("keydown", onKey);
         };
-    }, [picker]);
+    }, [picker, supportAt]);
 
     // A month change or a reload can drop the day the menu was anchored to.
-    useEffect(() => { setPicker(null); setConfirmSubmit(false); }, [year, month]);
+    useEffect(() => {
+        setPicker(null);
+        setConfirmSubmit(false);
+        setSupportAt(null);
+        setSupportForm(null);
+    }, [year, month]);
 
     const markRemainingPresent = () => {
         setMarks((m) => {
@@ -478,8 +557,14 @@ export default function MyAttendance() {
                                         {data.days.map((d) => {
                                             const value = d.day_type === "WORK" ? (marks[d.date] || "") : "H";
                                             const cls = value === "P" ? "is-p" : value === "L" ? "is-l" : value === "H" ? "is-h" : "";
+                                            // The corner marker shows on an off-day that can still
+                                            // be claimed, AND on any day carrying a claim. Those are
+                                            // different cells: once a claim is approved the day is a
+                                            // working day, so its marker sits on a P, not on an H.
+                                            const sup = d.support;
+                                            const showDot = d.can_request_support || !!sup;
                                             return (
-                                                <td key={d.date} className="dz-grid-cell dz-grid-mark-cell">
+                                                <td key={d.date} className={`dz-grid-cell dz-grid-mark-cell ${cls}`}>
                                                     <button
                                                         type="button"
                                                         className={`dz-mark ${cls}${d.editable ? "" : " is-locked"}${picker?.date === d.date ? " is-open" : ""}`}
@@ -492,6 +577,19 @@ export default function MyAttendance() {
                                                     >
                                                         {value || "-"}
                                                     </button>
+                                                    {showDot && (
+                                                        <button
+                                                            type="button"
+                                                            className={`dz-support-dot${sup ? ` is-${sup.status}` : ""}${supportAt?.day.date === d.date ? " is-open" : ""}`}
+                                                            aria-haspopup="dialog"
+                                                            aria-expanded={supportAt?.day.date === d.date}
+                                                            aria-label={`${prettyDate(d.date)} — ${SUPPORT_LABEL[sup?.status] || "record weekend support"}`}
+                                                            title={SUPPORT_LABEL[sup?.status] || "Worked this day? Record it"}
+                                                            onClick={(e) => openSupport(d, e)}
+                                                        >
+                                                            {SUPPORT_GLYPH[sup?.status] || "i"}
+                                                        </button>
+                                                    )}
                                                 </td>
                                             );
                                         })}
@@ -558,6 +656,17 @@ export default function MyAttendance() {
                         current={marks[picker.date] || ""}
                         onChoose={(v) => chooseMark(picker.date, v)}
                         onClose={() => setPicker(null)}
+                    />
+                )}
+
+                {supportAt && (
+                    <SupportBubble
+                        at={supportAt}
+                        today={data.today}
+                        busy={busy}
+                        onStart={() => startSupportClaim(supportAt.day)}
+                        onWithdraw={withdrawSupportClaim}
+                        onClose={() => setSupportAt(null)}
                     />
                 )}
             </div>
@@ -635,7 +744,201 @@ export default function MyAttendance() {
                 </div>
             )}
 
+            {supportForm && (
+                <SupportModal
+                    form={supportForm}
+                    setForm={setSupportForm}
+                    busy={busy}
+                    onSend={sendSupportClaim}
+                    onClose={() => setSupportForm(null)}
+                />
+            )}
+
             {toast && <div className="dz-toast">{toast}</div>}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The bubble behind the corner marker on an off-day.
+//
+// Portalled to <body> for the same reason MarkPicker is: the grid scrolls
+// horizontally, so anything positioned inside a cell gets clipped by it.
+// ---------------------------------------------------------------------------
+function SupportBubble({ at, today, busy, onStart, onWithdraw, onClose }) {
+    const ref = useRef(null);
+    const { day } = at;
+    const sup = day.support;
+    const ahead = day.date > today;
+
+    useEffect(() => {
+        const onDown = (e) => {
+            if (ref.current && ref.current.contains(e.target)) return;
+            // The marker's own click handler toggles this bubble. If mousedown
+            // closed it here, that click would immediately reopen it.
+            if (e.target.closest && e.target.closest(".dz-support-dot")) return;
+            onClose();
+        };
+        document.addEventListener("mousedown", onDown);
+        return () => document.removeEventListener("mousedown", onDown);
+    }, [onClose]);
+
+    const WIDTH = 246;
+    const height = sup ? 168 : 132;
+    const left = Math.max(8, Math.min(at.left - WIDTH + 26, window.innerWidth - WIDTH - 8));
+    const flipUp = at.bottom + height + 8 > window.innerHeight;
+    const top = flipUp ? Math.max(8, at.top - height - 4) : at.bottom + 4;
+
+    return createPortal(
+        <div ref={ref} className="dz-support-pop" role="dialog"
+             aria-label="Weekend support" style={{ top, left, width: WIDTH }}>
+            <div className="dz-support-pop-head">
+                <span className="dz-support-pop-date">{prettyDate(day.date)}</span>
+                <span className="dz-support-pop-label">{day.label}</span>
+            </div>
+
+            {sup ? (
+                <div className="dz-support-pop-body">
+                    <span className={`dz-support-chip is-${sup.status}`}>
+                        {sup.status === "pending" ? "Waiting for approval"
+                            : sup.status === "approved" ? "Approved"
+                            : "Rejected"}
+                        <em>{sup.day_portion === "half" ? "half day" : "full day"}</em>
+                    </span>
+                    <p className="dz-support-pop-reason">{sup.reason}</p>
+                    {sup.decision_note && (
+                        <p className="dz-support-pop-note">
+                            <strong>Approver:</strong> {sup.decision_note}
+                        </p>
+                    )}
+                    {sup.status === "pending" && (
+                        <button type="button" className="dz-btn dz-btn-sm dz-btn-ghost dz-support-wide"
+                                disabled={busy} onClick={() => onWithdraw(sup.request_id)}>
+                            Withdraw claim
+                        </button>
+                    )}
+                    {sup.status === "rejected" && day.can_request_support && (
+                        <button type="button" className="dz-btn dz-btn-sm dz-btn-primary dz-support-wide"
+                                disabled={busy} onClick={onStart}>
+                            Raise it again
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <div className="dz-support-pop-body">
+                    <p className="dz-support-pop-lead">
+                        {ahead
+                            ? "Working this day? Tell your approver now and it can be counted as a working day."
+                            : "Worked on this day? Record it and your approver can count it as a working day."}
+                    </p>
+                    <button type="button" className="dz-btn dz-btn-sm dz-btn-primary dz-support-wide"
+                            disabled={busy} onClick={onStart}>
+                        Record Weekend Support
+                    </button>
+                </div>
+            )}
+        </div>,
+        document.body
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Two steps: write the claim, then confirm it. The confirm is not ceremony -
+// it goes to a person, and a half-day typed as a full day is the kind of thing
+// you only notice when it is read back to you.
+// ---------------------------------------------------------------------------
+function SupportModal({ form, setForm, busy, onSend, onClose }) {
+    const { day, portion, reason, step, future } = form;
+    const ready = reason.trim().length > 0;
+    const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+    return (
+        <div className="dz-modal-backdrop" onClick={onClose}>
+            <div className="dz-modal dz-modal-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="dz-modal-head">
+                    <span className="dz-modal-title">
+                        {step === "form" ? "Record Weekend Support" : "Send this to your approver?"}
+                    </span>
+                    <button type="button" className="dz-btn dz-btn-sm dz-btn-quiet" onClick={onClose}>
+                        Close
+                    </button>
+                </div>
+
+                {step === "form" ? (
+                    <>
+                        <div className="dz-modal-body">
+                            <p className="dz-modal-note">
+                                <strong>{prettyDate(day.date)}</strong> is {day.label.toLowerCase()}.
+                                Tell your approver what you {future ? "will be working on" : "worked on"}.
+                                If they approve it, the day becomes a working day and is marked
+                                <strong> P</strong>.
+                            </p>
+
+                            <div className="dz-portion-row" role="radiogroup" aria-label="How much of the day">
+                                {PORTIONS.map((o) => (
+                                    <button
+                                        key={o.value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={portion === o.value}
+                                        className={`dz-portion${portion === o.value ? " is-on" : ""}`}
+                                        onClick={() => set({ portion: o.value })}
+                                    >
+                                        <span className="dz-portion-label">{o.label}</span>
+                                        <span className="dz-portion-hint">{o.hint}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <label className="dz-label" htmlFor="support-reason">
+                                {future ? "What will you be working on?" : "What did you work on?"}
+                            </label>
+                            <textarea
+                                id="support-reason"
+                                className="dz-input dz-textarea"
+                                rows={3}
+                                maxLength={500}
+                                value={reason}
+                                placeholder="e.g. production release support with the infra team"
+                                onChange={(e) => set({ reason: e.target.value })}
+                            />
+                        </div>
+                        <div className="dz-modal-foot">
+                            <button type="button" className="dz-btn dz-btn-ghost" onClick={onClose}>Cancel</button>
+                            <button type="button" className="dz-btn dz-btn-primary"
+                                    disabled={!ready} onClick={() => set({ step: "confirm" })}>
+                                Continue
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="dz-modal-body">
+                            <p className="dz-modal-note">
+                                Your approver decides this in dAdmin. Until they do, the day stays
+                                marked H on your sheet.
+                            </p>
+                            <dl className="dz-support-review">
+                                <div><dt>Day</dt><dd>{prettyDate(day.date)}</dd></div>
+                                <div><dt>Normally</dt><dd>{day.label}</dd></div>
+                                <div><dt>{future ? "Working" : "Worked"}</dt>
+                                     <dd>{portion === "half" ? "Half day" : "Full day"}</dd></div>
+                                <div><dt>Reason</dt><dd>{reason.trim()}</dd></div>
+                            </dl>
+                        </div>
+                        <div className="dz-modal-foot">
+                            <button type="button" className="dz-btn dz-btn-ghost"
+                                    disabled={busy} onClick={() => set({ step: "form" })}>
+                                Back
+                            </button>
+                            <button type="button" className="dz-btn dz-btn-primary"
+                                    disabled={busy} onClick={onSend}>
+                                Yes, send it
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
         </div>
     );
 }
