@@ -14,19 +14,29 @@
 //  The summary block starts immediately after the last day column, so it sits
 //  at AJ..AP for a 31-day month, AI..AO for 30, AG..AM for February.
 //
-//  WHAT IS DELIBERATELY NOT COPIED
-//  -------------------------------
-//  The original's sheets disagree with each other - August's month header still
-//  reads "January", March's did too, and February-26 carried 2025 dates. Its
-//  summary cells are live formulas, several of which are wrong: "Total Day Off"
-//  is COUNTIF(E4:AH4,"H"), which stops at day 30 and under-counts every 31-day
-//  month, and "Worked Days" is IF(leave>=allowed, working-leave, working) - a
-//  cliff where two leave days cost both rather than none.
+//  A WORKING FILE, LIKE THE ORIGINAL
+//  ---------------------------------
+//  Every feature of the original's sheets is reproduced, so the download works
+//  the way people used the spreadsheet: row 4 is a P / L / H dropdown, the day
+//  colours follow the value through conditional formatting, and the month
+//  header, the date chain, every summary cell and the daily-strength row are
+//  live formulas. Each formula also carries its computed result, so the file
+//  shows the right numbers before Excel recalculates anything - and those
+//  results come from attendanceCalendar.js, so a download always agrees with
+//  the page it was downloaded from.
 //
-//  So the numbers here are written as VALUES from attendanceCalendar.js rather
-//  than as formulas. The sheet looks identical; it just cannot recompute itself
-//  into a wrong answer, and it is a record of an approved month rather than a
-//  working file.
+//  Three formulas deliberately differ from the original, because the original's
+//  would disagree with the page (and with the payroll behind it):
+//    Total Day Off       COUNTIF over the WHOLE month. The original's stopped at
+//                        E4:AH4 (day 30) and under-counted every 31-day month.
+//    Total Working Days  Days in month - Total Day Off. The original counted
+//                        Mon-Fri off the day names, so it ignored holidays,
+//                        adhoc days and the Mon-Sat pattern entirely.
+//    Worked Days         Working days - Leave taken. The original's
+//                        IF(leave>=allowed, working-leave, working) is a cliff:
+//                        two leave days cost both, one costs nothing.
+//  The dropdown's list is written "P,L,H" rather than the original's "P, L, H",
+//  so what lands in the cell is exactly the letter the formulas count.
 // ============================================================================
 const path = require("path");
 const fs = require("fs");
@@ -143,6 +153,7 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     ws.getRow(5).height = 20.25;
 
     const cell = (r, c) => ws.getCell(r, c);
+    const colLetter = (n) => ws.getColumn(n).letter;
 
     // ── row 1 ──
     // "Dolluz Corp" links out, as it does in the original. Its blue-and-
@@ -164,8 +175,11 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     cell(1, 4).value = "Month";
     paint(cell(1, 4), { fill: C.header, size: 18 });
 
+    // =D2, as the original's April and June sheets have it. The sheets that
+    // typed the name instead are the ones whose header still said "January"
+    // in August.
     mergeStyled(ws, 1, FIRST_DAY_COL, 1, lastDayCol,
-        { fill: C.header, size: 18 }).value = MONTHS[month - 1];
+        { fill: C.header, size: 18 }).value = { formula: "D2", result: MONTHS[month - 1] };
 
     mergeStyled(ws, 1, sumCol, 1, sumCol + 6, { fill: C.header, size: 18 }).value = "Attendance";
 
@@ -194,8 +208,11 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     days.forEach((d, i) => {
         const c = cell(3, FIRST_DAY_COL + i);
         // A real date, so the column reads "1-Jan" and sorts/filters properly.
+        // The first day is the date itself; every later one is the original's
+        // chain, =+E3+1, so the row can never skip or repeat a day.
         const [y, m, dd] = d.date.split("-").map(Number);
-        c.value = new Date(Date.UTC(y, m - 1, dd));
+        const date = new Date(Date.UTC(y, m - 1, dd));
+        c.value = i === 0 ? date : { formula: `+${colLetter(FIRST_DAY_COL + i - 1)}3+1`, result: date };
         paint(c, { fill: C.header, numFmt: "d-mmm" });
     });
 
@@ -218,6 +235,7 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
     cell(4, 4).value = employee.job_name || "";
     paint(cell(4, 4), { fill: C.nameCell, size: 11 });
 
+    const dayVals = [];
     days.forEach((d, i) => {
         const c = cell(4, FIRST_DAY_COL + i);
         // The server owns H. A non-working day is H whatever the sheet holds,
@@ -225,29 +243,76 @@ async function buildAttendanceWorkbook({ employee, year, month, calendar, summar
         const v = d.day_type === "WORK" ? (marks[d.date] === "P" || marks[d.date] === "L" ? marks[d.date] : "")
                 : d.day_type === "NON_EMPLOYED" ? ""
                 : "H";
+        dayVals.push(v);
         c.value = v;
-        // The original coloured these with conditional formatting. Direct fills
-        // render identically and cannot recolour if someone edits the record.
+        // Painted directly AND by the conditional formatting below. The direct
+        // fill is what a viewer without conditional formatting shows; the
+        // conditional rules are what make a cell recolour when somebody picks a
+        // different value from the dropdown.
         const fill = v === "P" ? C.present : v === "L" ? C.leave : v === "H" ? C.header : C.dayIdle;
         paint(c, { fill, color: v ? C.headerText : C.header });
+        // The original's dropdown, on every day cell.
+        c.dataValidation = {
+            type: "list",
+            allowBlank: true,
+            formulae: ['"P,L,H"'],
+            showErrorMessage: true,
+            errorStyle: "stop",
+            errorTitle: "Attendance",
+            error: "Choose P (present), L (leave) or H (holiday / week-off).",
+        };
     });
 
+    // The original's colour rules - P green, L red, H navy, white text - plus
+    // one it lacked: a cleared cell goes back to the idle colour instead of
+    // keeping the fill it had before it was emptied.
+    const dayRow = `${colLetter(FIRST_DAY_COL)}4:${colLetter(lastDayCol)}4`;
+    const cfFill = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb }, bgColor: { argb } });
+    const whiteText = { color: { argb: C.headerText } };
+    ws.addConditionalFormatting({
+        ref: dayRow,
+        rules: [
+            { type: "cellIs", operator: "equal", formulae: ['"P"'], style: { fill: cfFill(C.present), font: whiteText } },
+            { type: "cellIs", operator: "equal", formulae: ['"L"'], style: { fill: cfFill(C.leave), font: whiteText } },
+            { type: "cellIs", operator: "equal", formulae: ['"H"'], style: { fill: cfFill(C.header), font: whiteText } },
+            { type: "expression", formulae: [`LEN(${colLetter(FIRST_DAY_COL)}4)=0`], style: { fill: cfFill(C.dayIdle) } },
+        ],
+    });
+
+    // Live formulas over row 4, in the original's columns, each carrying the
+    // app's own number as its cached result. See the header for the three
+    // that deliberately differ from the original.
     const s = summary;
-    [s.present_days, s.leave_days, s.allowed_leave, s.days_in_month,
-     s.working_days, s.worked_days, s.days_off].forEach((v, i) => {
+    const sumL = (i) => colLetter(sumCol + i);   // Present, Leave, Allowed, Days, Working, Worked, Off
+    const dayNames = `${colLetter(FIRST_DAY_COL)}2:${colLetter(lastDayCol)}2`;
+    // Before the joining date a day is neither worked nor off, and is blank in
+    // row 4 - so those days come off Working as a fixed count.
+    const beforeJoining = s.non_employed_days ? `-${s.non_employed_days}` : "";
+    [
+        { formula: `COUNTIF(${dayRow},"P")`, result: s.present_days },
+        { formula: `COUNTIF(${dayRow},"L")`, result: s.leave_days },
+        s.allowed_leave,                                   // a policy value, typed in the original too
+        { formula: `COUNTA(${dayNames})`, result: s.days_in_month },
+        { formula: `${sumL(3)}4-${sumL(6)}4${beforeJoining}`, result: s.working_days },
+        { formula: `${sumL(4)}4-${sumL(1)}4`, result: s.worked_days },
+        { formula: `COUNTIF(${dayRow},"H")`, result: s.days_off },
+    ].forEach((v, i) => {
         cell(4, sumCol + i).value = v;
         paint(cell(4, sumCol + i), { fill: C.header });
     });
 
     // ── row 5: daily strength. One employee per sheet, so it is 1 or 0. ──
+    // The original's formulas, verbatim: B5 counts the employee row, and each
+    // day counts that day's P - so picking P from a dropdown moves it.
     paint(cell(5, 1), { fill: C.header });
-    cell(5, 2).value = 1;
+    cell(5, 2).value = { formula: "COUNTA(B4:B4)", result: 1 };
     paint(cell(5, 2), { fill: C.header });
     mergeStyled(ws, 5, 3, 5, 4, { fill: C.header, size: 14 }).value = "Daily Employee Strength";
 
     days.forEach((d, i) => {
         const c = cell(5, FIRST_DAY_COL + i);
-        c.value = marks[d.date] === "P" && d.day_type === "WORK" ? 1 : 0;
+        const col = colLetter(FIRST_DAY_COL + i);
+        c.value = { formula: `COUNTIF(${col}4:${col}4, "P")`, result: dayVals[i] === "P" ? 1 : 0 };
         paint(c, { fill: C.header, size: 14 });
     });
 

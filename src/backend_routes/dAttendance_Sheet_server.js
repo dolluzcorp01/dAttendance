@@ -56,6 +56,26 @@ const num = (raw, fallback, min) => {
     return min === undefined ? v : Math.max(min, v);
 };
 
+// A day the calendar calls WORK can only ever hold P, L or nothing. An H stored
+// against one is stale: the row was written while the day was still a week-off
+// or a holiday, and the calendar has changed since - dAdmin added an adhoc day,
+// or the holiday was removed from dTime. dAdmin's Work Pattern save rewrites
+// att_adhoc_day and never touches att_sheet_day, so this is not a rare case.
+//
+// Drop it rather than show it. Shown raw, the page printed "H" on a working day
+// while the downloaded sheet - which only ever writes P or L on a working day -
+// printed a blank: the same month, two different answers. summariseSheet
+// already counted the day as unmarked, so no total moves; the cell just stops
+// claiming the day is off.
+const MARKABLE = new Set(["P", "L"]);
+const dropStaleMarks = (calendar, marks) => {
+    const out = { ...marks };
+    for (const d of calendar.days) {
+        if (d.day_type === "WORK" && !MARKABLE.has(out[d.date])) delete out[d.date];
+    }
+    return out;
+};
+
 const loadConfig = async () => {
     const rows = await q(datt, `SELECT config_key, config_value FROM att_config`);
     const c = Object.fromEntries(rows.map((r) => [r.config_key, r.config_value]));
@@ -171,6 +191,7 @@ router.get("/month", verifyJWT, async (req, res) => {
                    FROM att_sheet_day WHERE sheet_id = ?`, [sheet.sheet_id]);
             marks = Object.fromEntries(rows.map((r) => [r.work_date, r.day_status]));
         }
+        marks = dropStaleMarks(calendar, marks);
 
         // Approved leave from dTime. Shown either way: when leave_source is
         // 'dtime' it OWNS the L days; when 'manual' it is advisory, and a
@@ -389,6 +410,20 @@ async function writeMarks({ emp_id, year, month, marks, req }) {
             ON DUPLICATE KEY UPDATE day_status = VALUES(day_status),
                                     day_type   = VALUES(day_type),
                                     source     = VALUES(source)`, [rows]);
+    }
+
+    // Clear the stale system H off any day that is a working day now - an adhoc
+    // day, or a holiday since removed - and was not marked in this save. The
+    // upsert above never reaches those rows: it writes H only for off-days and
+    // P/L only for days that carry a mark, so a stale H would outlive every save.
+    // Only H is ever deleted here - a real P or L is never touched.
+    const unmarkedWork = calendar.days
+        .filter((d) => d.day_type === "WORK" && !(marks || {})[d.date])
+        .map((d) => d.date);
+    if (unmarkedWork.length) {
+        await q(datt, `
+            DELETE FROM att_sheet_day
+             WHERE sheet_id = ? AND day_status = 'H' AND work_date IN (?)`, [sheetId, unmarkedWork]);
     }
 
     const saved = Object.fromEntries(
@@ -612,7 +647,7 @@ router.get("/download", verifyJWT, async (req, res) => {
             pattern: patternRows[0]?.pattern || cal.DEFAULT_PATTERN,
             adhocDays: adhocRows.map((a) => a.work_date), holidays,
         });
-        const marks = Object.fromEntries(markRows.map((r) => [r.d, r.day_status]));
+        const marks = dropStaleMarks(calendar, Object.fromEntries(markRows.map((r) => [r.d, r.day_status])));
         const s = cal.summariseSheet({ calendar, marks, allowedLeave: cfg.allowedLeave });
 
         // The designation column. loadEmployee() carries the job_position id,
