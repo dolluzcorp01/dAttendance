@@ -42,6 +42,11 @@ const datt = getDBConnection("dattendance");
 const JWT_SECRET = process.env.JWT_SECRET;
 const isProd = process.env.NODE_ENV === "production";
 
+// Which app this is, as dAdmin's Login Page Config knows it. Must match
+// LOGIN_APPS in dAdmin exactly, case included, or the revocation check below
+// silently never matches.
+const APP_KEY = "dAttendance";
+
 const q = (db, sql, params = []) =>
     new Promise((resolve, reject) =>
         db.query(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)))
@@ -96,6 +101,48 @@ const deviceCookie = (days) => ({
     maxAge: days * 24 * 60 * 60 * 1000,
 });
 
+// ── Session revocation ───────────────────────────────────────────────────
+// dAdmin -> Inside D -> Login Page Config -> "Revoke remembered" now also writes
+// a marker to dadmin.login_session_revoke. Without this check, revoking would
+// clear the remembered browser and still leave someone signed in here.
+//
+// (dAttendance's session JWT does expire - SESSION_HOURS, 12h - unlike the
+// no-expiry tokens elsewhere in the suite. That bounds the damage, but twelve
+// hours is still far too long for a session an admin has deliberately ended.)
+//
+// A token is dead if it was issued in a second STRICTLY EARLIER than the
+// revocation. Comparing whole seconds matters - jwt's `iat` is second-granular,
+// so a revoke at 10:00:00.500 followed by a fresh sign-in at 10:00:00.700 would
+// otherwise kill the brand-new token the instant it was issued.
+//
+// revoked_at is written by dAdmin with server-side NOW(3) and read back here
+// with server-side UNIX_TIMESTAMP(), so both ends are evaluated by the same
+// MySQL server in the same zone - the pools' client-side timezone option never
+// comes into it.
+//
+// emp_id '*' is an app-wide marker: revoke-all ends every session for the app.
+//
+// `dadmin`, not `datt`: the table lives in the dadmin schema.
+function sessionRevokedAfter(emp_id, cb) {
+    dadmin.query(
+        `SELECT UNIX_TIMESTAMP(MAX(revoked_at)) AS sec
+           FROM login_session_revoke
+          WHERE app_key = ? AND emp_id IN (?, '*')`,
+        [APP_KEY, emp_id],
+        (err, rows) => {
+            if (err) {
+                // Deliberately fails OPEN. This is a revocation list, not the
+                // authentication itself: a transient DB error signing every
+                // user of the app out is a worse outcome than a revoked session
+                // surviving a few seconds. Logged loudly instead.
+                console.error("session-revoke check failed:", err.message);
+                return cb(null);
+            }
+            cb(rows?.[0]?.sec ? Math.floor(Number(rows[0].sec)) : null);
+        }
+    );
+}
+
 const verifyJWT = (req, res, next) => {
     const token = req.cookies.dAttendance_token || req.cookies.dolluzcorp_token;
     if (!token) return res.status(403).json({ message: "Access Denied. No Token Provided!" });
@@ -107,8 +154,22 @@ const verifyJWT = (req, res, next) => {
         if (decoded.typ && decoded.typ !== "session") {
             return res.status(403).json({ message: "Invalid Token" });
         }
-        req.emp_id = decoded.emp_id;
-        next();
+        // AFTER the typ check above, never instead of it: a challenge token
+        // must still never authenticate a request, and rejecting it first also
+        // means it never costs a database round trip.
+        sessionRevokedAfter(decoded.emp_id, (revokedSec) => {
+            if (revokedSec !== null && decoded.iat && revokedSec > decoded.iat) {
+                // Cleared with the attributes it was SET with (same as /logout).
+                // In production the cookie is SameSite=None; Secure, and a bare
+                // clearCookie() would not match it - the browser would keep
+                // sending the dead token and every request would 401 again.
+                res.clearCookie("dAttendance_token",
+                    { httpOnly: true, secure: isProd, sameSite: isProd ? "None" : "Lax" });
+                return res.status(401).json({ message: "SESSION_REVOKED" });
+            }
+            req.emp_id = decoded.emp_id;
+            next();
+        });
     });
 };
 
@@ -222,6 +283,32 @@ async function consumeOtp({ challenge, otp, purpose, cfg }) {
 }
 
 /** True when this browser has been trusted for this employee and is not expired. */
+// dAdmin -> Inside D -> Login Page Config decides whether dAttendance asks for
+// an emailed code, and how long "remember" lasts. Read on every sign-in, so a
+// change there applies to the very next attempt with no restart.
+//
+// Only those two settings moved. The code's own mechanics - expiry, attempts,
+// resend gap, sends per hour - stay in att_config, and trust stays device-level.
+//
+// Fails CLOSED: on any error or a missing row, two-step stays ON with
+// att_config's own day count - a broken read must never switch verification off.
+async function signinPolicy(fallbackDays) {
+    try {
+        const rows = await q(dadmin,
+            `SELECT two_factor_enabled, trust_days FROM login_app_config WHERE app_key = ?`,
+            [APP_KEY]);
+        if (!rows.length) return { enabled: true, days: fallbackDays };
+        const days = Number(rows[0].trust_days);
+        return {
+            enabled: Number(rows[0].two_factor_enabled) !== 0,
+            days: Number.isFinite(days) && days >= 1 ? days : fallbackDays,
+        };
+    } catch (err) {
+        console.error("[auth] sign-in policy unreadable, two-step stays on:", err.message);
+        return { enabled: true, days: fallbackDays };
+    }
+}
+
 async function deviceTrusted(req, emp_id) {
     const raw = req.cookies?.dAttendance_device;
     if (!raw) return false;
@@ -269,8 +356,11 @@ router.post("/login", async (req, res) => {
         try { ok = await bcrypt.compare(password, user.account_pass); } catch { ok = false; }
         if (!ok) return fail();
 
-        // A browser the employee already trusted skips the second factor.
-        if (await deviceTrusted(req, user.emp_id)) {
+        // No emailed code when dAdmin has two-step switched off for this app,
+        // or when this browser is already trusted. Both are decided only here,
+        // AFTER the password check above - never instead of it.
+        const policy = await signinPolicy(cfg.trustedDays);
+        if (!policy.enabled || (await deviceTrusted(req, user.emp_id))) {
             issueSession(res, user.emp_id);
             return res.json({
                 success: true,
@@ -294,7 +384,7 @@ router.post("/login", async (req, res) => {
             sent_to: otpUtil.maskEmail(user.emp_mail_id),
             expires_in: cfg.otpMinutes * 60,
             resend_after: cfg.resendSeconds,
-            remember_days: cfg.trustedDays,
+            remember_days: policy.days,
             // Echoed only so the code screen can keep the tick state visible.
             // /verify-otp reads its own body for this, which is safe: only the
             // person holding the emailed code can reach that step at all.
@@ -326,7 +416,10 @@ router.post("/verify-otp", async (req, res) => {
         if (!employeeUsable(user)) return res.status(401).json({ message: "Invalid credentials" });
 
         issueSession(res, emp_id);
-        if (remember === true) await trustDevice(req, res, emp_id, cfg.trustedDays);
+        if (remember === true) {
+            const policy = await signinPolicy(cfg.trustedDays);
+            await trustDevice(req, res, emp_id, policy.days);
+        }
 
         res.json({
             success: true,
@@ -580,4 +673,101 @@ router.post("/logout", async (req, res) => {
     res.json({ success: true });
 });
 
+// ---------------------------------------------------------------------------
+//  Change password with the CURRENT password
+//
+//  The other way to a new password is /forgot/* - prove the mailbox with an
+//  emailed code. This is the route for someone who simply knows their password
+//  and is already signed in, which is why both halves sit behind verifyJWT:
+//  /login?changePassword is reached FROM the app, so the session cookie is
+//  still there. No session, no old-password route - the UI sends those people
+//  to the emailed-code flow instead.
+//
+//  Deliberately NOT dAdmin's shape. Its /update-password takes either a cookie
+//  or an OTP in one unguarded route; keeping the two paths apart means neither
+//  can be used to stand in for the other.
+// ---------------------------------------------------------------------------
+
+// POST /change-password/verify   body: { current }
+//
+// Grants nothing. It exists only so the UI can advance a screen rather than
+// making someone type a new password twice before being told the old one was
+// wrong. The real check is in POST /change-password, which repeats it.
+router.post("/change-password/verify", verifyJWT, async (req, res) => {
+    const current = req.body?.current;
+    if (typeof current !== "string" || !current) {
+        return res.status(401).json({ message: "That password is not correct." });
+    }
+    try {
+        const user = await findEmployee(req.emp_id);
+        // Same single message whatever went wrong - a missing account, a
+        // disabled one and a wrong password are indistinguishable from here,
+        // exactly as /login treats them.
+        if (!employeeUsable(user) || !user.account_pass) {
+            return res.status(401).json({ message: "That password is not correct." });
+        }
+        const ok = await bcrypt.compare(current, user.account_pass);
+        if (!ok) return res.status(401).json({ message: "That password is not correct." });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("[dAttendance/change-password/verify]", err);
+        res.status(500).json({ message: "Database error" });
+    }
+});
+
+// POST /change-password   body: { current, password, confirm }
+router.post("/change-password", verifyJWT, async (req, res) => {
+    const { current, password, confirm } = req.body || {};
+
+    if (confirm !== undefined && password !== confirm) {
+        return res.status(400).json({ message: "The two passwords do not match." });
+    }
+    // The same rules /forgot/reset applies, from the same function: two routes
+    // to a new password must not accept different passwords.
+    const problem = passwordProblem(password);
+    if (problem) return res.status(400).json({ message: problem });
+
+    try {
+        const user = await findEmployee(req.emp_id);
+        if (!employeeUsable(user) || !user.account_pass) {
+            return res.status(401).json({ message: "That password is not correct." });
+        }
+
+        // Checked AGAIN here, not merely at /verify. That call grants nothing
+        // and leaves no state, so a client that skipped it - or one replaying a
+        // stale advance - reaches this point with no proof of anything. The
+        // check that matters is the one at the point of write.
+        if (typeof current !== "string" || !current ||
+            !(await bcrypt.compare(current, user.account_pass))) {
+            return res.status(401).json({ message: "That password is not correct." });
+        }
+
+        if (await bcrypt.compare(password, user.account_pass)) {
+            return res.status(400).json({ message: "That is already your password." });
+        }
+
+        const hash = await bcrypt.hash(password, 10);
+        // Only account_pass, matching /forgot/reset and dAdmin's own reset. The
+        // plaintext account_pass_text column is deliberately left alone.
+        await q(dadmin, `
+            UPDATE employee SET account_pass = ?, updated_time = NOW()
+             WHERE emp_id = ? AND deleted_time IS NULL`, [hash, user.emp_id]);
+
+        // Identical to /forgot/reset: a changed password drops every remembered
+        // browser. The UI promises this on both screens, and a route that
+        // quietly skipped it would make that promise false.
+        await q(datt, `
+            UPDATE att_trusted_device SET revoked_time = NOW()
+             WHERE emp_id = ? AND revoked_time IS NULL`, [user.emp_id]);
+        res.clearCookie("dAttendance_device", { httpOnly: true, secure: isProd, sameSite: isProd ? "None" : "Lax" });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("[dAttendance/change-password]", err);
+        res.status(500).json({ message: "Database error" });
+    }
+});
+
 module.exports = { router, verifyJWT };
+

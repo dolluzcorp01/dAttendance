@@ -16,11 +16,14 @@
 .dzs-panel {
   flex: 1;
   min-width: 620px;
+  /* The default, used until dAdmin answers and whenever it cannot. An inline
+     style overrides this with the current banner's own pair. */
   background: linear-gradient(140deg, #0E1A2B 0%, #1E3350 100%);
   color: #fff;
   padding: 46px 62px 52px;
   position: relative;
   overflow: hidden;
+  transition: background .9s ease;
 }
 
 /* Cropped off the corner on purpose, so it reads as a watermark rather than
@@ -113,13 +116,21 @@
   align-items: center;
   gap: 10px;
 }
+/* Buttons now, not spans: each one jumps to its banner. */
 .dzs-bar {
   width: 12px;
   height: 5px;
+  padding: 0;
+  border: none;
   border-radius: 3px;
   background: rgba(255, 255, 255, .30);
+  cursor: pointer;
+  transition: width .35s ease, background .35s ease;
 }
+.dzs-bar:hover { background: rgba(255, 255, 255, .55); }
+.dzs-bar:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .dzs-bar.is-active { width: 38px; background: var(--gold); }
+.dzs-bar.is-active:hover { background: var(--gold); }
 
 /* ── RIGHT: the form ───────────────────────────────────────────────────── */
 .dzs-form {
@@ -217,6 +228,10 @@
 }
 .dzs-remember input { width: 15px; height: 15px; accent-color: var(--ink); cursor: pointer; }
 
+/* The two links under Continue on the change-password screen. .dzs-link pushes
+   itself right with margin-left:auto, which is what keeps the pair split. */
+.dzs-options-foot { margin-top: 18px; margin-bottom: 0; }
+
 .dzs-link {
   margin-left: auto;
   color: var(--blue);
@@ -297,6 +312,26 @@
 .dzs-submit:hover:not(:disabled) { background: var(--ink-2); border-color: var(--ink-2); }
 .dzs-submit:disabled { opacity: .45; cursor: not-allowed; }
 
+/* The contact line at the foot of the form column, on every step. */
+.dzs-support {
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--faint);
+}
+.dzs-support a { color: var(--blue); font-weight: 600; text-decoration: none; }
+.dzs-support a:hover { text-decoration: underline; }
+
+/* Caps Lock warning under a password field. Amber, not red: the password may
+   be perfectly correct, this is a heads-up rather than an error. */
+.dzs-caps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #B7791F;
+}
+
 .dzs-foot {
   font-size: 12.5px;
   color: var(--faint);
@@ -351,4 +386,32 @@
   .dzs-stats { gap: 26px; }
 
   .dzs-form { flex: 1; width: auto; padding: 32px 24px; }
+}
+
+/* ── Image banner ───────────────────────────────────────────────────────
+   A banner configured with an image fills the panel on its own: the rings,
+   watermark, lockup and all the copy are not rendered, so there is nothing
+   to sit over the picture. Only the indicator remains, because without it a
+   multi-banner carousel cannot be navigated. */
+.dzs-panel--img {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    padding: 0;
+    /* The inline backgroundImage replaces the gradient .dzs-panel sets, so
+       until the file arrives the panel would paint transparent and flash white
+       on a dark sign-in screen. This holds the navy underneath it. */
+    background-color: #0E1A2B;
+}
+
+/* The bars have to stay readable over an arbitrary photograph, so they get a
+   scrim of their own rather than relying on the panel being dark.
+   .dzs-indicator is already position:absolute at left:62px / bottom:52px, so
+   only the box needs shrinking to its content - do not touch left/bottom. */
+.dzs-panel--img .dzs-indicator {
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(13, 27, 42, 0.45);
+    backdrop-filter: blur(3px);
+    width: fit-content;
 }

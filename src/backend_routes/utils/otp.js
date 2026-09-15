@@ -46,18 +46,44 @@ function maskEmail(email) {
 }
 
 // ---------------------------------------------------------------------------
-//  The mail. Same visual language as dAdmin's reset mail so the two do not
-//  look like they came from different companies.
+//  The mail. Markup copied from dAdmin's sign-in mail (issueLoginOtp in its
+//  Login_server.js) with only the app name changed, so dAdmin, dSlip and this
+//  are one family. Colours, masthead and footer come from there - do not
+//  "improve" them here without changing all three.
 // ---------------------------------------------------------------------------
 function buildOtpMail({ to, firstName, otp, purpose, minutes }) {
     const isReset = purpose === "reset";
-    const title = isReset ? "Password reset code" : "Sign-in verification code";
+
+    // The code leads the subject on purpose: it shows in the notification
+    // preview, so it can be read without opening the mail. Same as dAdmin.
     const subject = isReset
-        ? "dAttendance - Password reset code"
-        : "dAttendance - Your sign-in code";
+        ? `${otp} is your dAttendance password reset code`
+        : `${otp} is your dAttendance sign-in code`;
+
+    const title = isReset ? "Password reset code" : "Your sign-in code";
+
+    // dAdmin's sign-in wording, verbatim but for the app name. The expiry
+    // sentence is appended below rather than written into each lead, so the two
+    // purposes cannot drift apart on it.
     const lead = isReset
         ? "We received a request to reset your <strong>dAttendance</strong> password. Use the code below to confirm it is you."
-        : "Someone signed in to <strong>dAttendance</strong> with your employee ID and password. Use the code below to finish signing in.";
+        : "Someone entered the correct password for your <strong>dAttendance</strong> account. Enter the code below to finish signing in.";
+
+    // Reaching the sign-in step means the password was ALREADY correct, so
+    // "ignore this and you're fine" would be false - somebody else knows it.
+    // A reset proves nothing about who asked, so there the softer line is right.
+    const warning = isReset
+        ? "If this was not you, ignore this email and your password stays unchanged. Never share this code."
+        : "If this was not you, your password is known to someone else. Change it immediately and tell admin@dolluzcorp.com. Never share this code.";
+
+    const footerLine = isReset
+        ? "Dolluz Corp &middot; dAttendance Password Reset OTP"
+        : "Dolluz Corp &middot; dAttendance Sign-in Verification";
+
+    // Read from att_config.otp_expiry_minutes, never hard-coded: the mail must
+    // not claim 2 minutes if an admin sets something else.
+    const expiry = `It expires in <strong>${minutes} minute${minutes === 1 ? "" : "s"}</strong>.`;
+
     const name = firstName
         ? firstName.charAt(0).toUpperCase() + firstName.slice(1)
         : "there";
@@ -68,19 +94,19 @@ function buildOtpMail({ to, firstName, otp, purpose, minutes }) {
         subject,
         html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#F0F4F8;font-family:'DM Sans',Arial,sans-serif">
 <div style="max-width:520px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.10)">
-  <div style="background:#0E1A2B;padding:28px 36px 20px">
-    <div style="font-weight:800;font-size:22px;color:#fff;letter-spacing:-0.5px">Dolluz Corp<span style="color:#C9A227">.</span></div>
-    <div style="font-size:11px;color:#94A3B8;letter-spacing:2px;text-transform:uppercase;margin-top:4px">dAttendance</div>
+  <div style="background:#0D1B2A;padding:28px 36px 20px">
+    <div style="font-weight:800;font-size:22px;color:#fff;letter-spacing:-0.5px">Dolluz Corp<span style="color:#E8520A">.</span></div>
+    <div style="font-size:11px;color:#94A3B8;letter-spacing:2px;text-transform:uppercase;margin-top:4px">dAttendance Portal</div>
   </div>
   <div style="padding:32px 36px">
-    <div style="font-size:15px;font-weight:700;color:#0E1A2B;margin-bottom:8px">${title}</div>
-    <div style="font-size:13px;color:#64748B;margin-bottom:24px;line-height:1.6">Hi <strong>${name}</strong>,<br>${lead} This code expires in <strong>${minutes} minute${minutes === 1 ? "" : "s"}</strong>.</div>
-    <div style="background:#F8FAFC;border:2px dashed #C9A227;border-radius:12px;padding:20px;text-align:center;margin-bottom:24px">
-      <div style="font-family:'Courier New',monospace;font-size:36px;font-weight:800;color:#0E1A2B;letter-spacing:10px">${otp}</div>
+    <div style="font-size:15px;font-weight:700;color:#0D1B2A;margin-bottom:8px">${title}</div>
+    <div style="font-size:13px;color:#64748B;margin-bottom:24px;line-height:1.6">Hi <strong>${name}</strong>,<br>${lead} ${expiry}</div>
+    <div style="background:#F8FAFC;border:2px dashed #E8520A;border-radius:12px;padding:20px;text-align:center;margin-bottom:24px">
+      <div style="font-family:'Courier New',monospace;font-size:36px;font-weight:800;color:#E8520A;letter-spacing:10px">${otp}</div>
     </div>
-    <div style="font-size:12px;color:#94A3B8;line-height:1.6">If this was not you, ignore this email and your ${isReset ? "password" : "account"} stays unchanged. Never share this code with anyone — Dolluz Corp will not ask you for it.</div>
+    <div style="font-size:12px;color:#94A3B8;line-height:1.6">${warning}</div>
   </div>
-  <div style="background:#F8FAFC;padding:16px 36px;text-align:center;font-size:11px;color:#94A3B8">Dolluz Corp &middot; dAttendance<br>For any queries, please contact <a href="mailto:admin@dolluzcorp.com" style="color:#C9A227;text-decoration:none">admin@dolluzcorp.com</a></div>
+  <div style="background:#F8FAFC;padding:16px 36px;text-align:center;font-size:11px;color:#94A3B8">${footerLine}<br>For any queries, please contact <a href="mailto:admin@dolluzcorp.com" style="color:#E8520A;text-decoration:none">admin@dolluzcorp.com</a></div>
 </div></body></html>`,
     };
 }
@@ -92,6 +118,28 @@ function buildOtpMail({ to, firstName, otp, purpose, minutes }) {
  * development works without live mail. That branch is refused in production -
  * silently printing sign-in codes to a server log would be a back door.
  */
+// Every send is echoed to the terminal in the same shape dSlip uses, so one
+// tail across the suite reads the same way.
+//
+// NOTE: this prints the code itself, in production as well as development.
+// That is deliberate and matches dSlip, but it does mean anyone who can read
+// the server log - pm2 logs, a shipped log file, a screen-share - can sign in
+// as that employee for as long as the code lives.
+function logMailSent(msg, args) {
+    const label = args.purpose === "reset" ? "password reset" : "2FA sign-in";
+    console.log(
+        `✅ Mail sent [dAttendance ${label}]
+` +
+        `   From   : ${msg.from}
+` +
+        `   To     : ${msg.to}
+` +
+        `   Subject: ${msg.subject}
+` +
+        `   OTP    : ${args.otp}`
+    );
+}
+
 async function sendOtpMail(args) {
     const msg = buildOtpMail(args);
     if (!process.env.SENDGRID_API_KEY) {
@@ -99,11 +147,21 @@ async function sendOtpMail(args) {
             console.error("[otp] SENDGRID_API_KEY missing in production - refusing to issue a code");
             return false;
         }
-        console.warn(`[otp] DEV ONLY - no SENDGRID_API_KEY. Code for ${args.to}: ${args.otp}`);
+        // No key, so nothing was actually sent - do NOT print "Mail sent".
+        console.warn(
+            `⚠️  No SENDGRID_API_KEY - mail NOT sent [dAttendance ${args.purpose === "reset" ? "password reset" : "2FA sign-in"}]
+` +
+            `   To     : ${args.to}
+` +
+            `   Subject: ${msg.subject}
+` +
+            `   OTP    : ${args.otp}`
+        );
         return true;
     }
     try {
         await sgMail.send(msg);
+        logMailSent(msg, args);
         return true;
     } catch (err) {
         console.error("[otp] SendGrid failed:", err?.response?.body || err.message);
