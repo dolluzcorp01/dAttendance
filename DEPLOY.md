@@ -239,7 +239,6 @@ JWT_SECRET=
 # from dAdmin's .env — same account. WITHOUT IT NOBODY CAN SIGN IN: the server
 # refuses to issue a code in production rather than print it to a log.
 SENDGRID_API_KEY=
-DATTENDANCE_FROM_EMAIL="dAttendance" <connect@dolluzcorp.com>
 OTP_LENGTH=6
 BCRYPT_ROUNDS=10
 

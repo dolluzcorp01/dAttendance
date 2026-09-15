@@ -15,7 +15,9 @@ if (process.env.SENDGRID_API_KEY) sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
 const OTP_LENGTH = Number(process.env.OTP_LENGTH) || 6;
 const ROUNDS = Number(process.env.BCRYPT_ROUNDS) || 10;
-const FROM_EMAIL = process.env.DATTENDANCE_FROM_EMAIL || '"dAttendance" <connect@dolluzcorp.com>';
+// Fixed in code, not read from .env - the sender is part of the app's identity,
+// the same way dAdmin's mail always comes from "dAdmin Support".
+const FROM_EMAIL = '"dAttendance Support" <connect@dolluzcorp.com>';
 
 /** A zero-padded numeric code. crypto.randomInt, not Math.random. */
 function generateOtp() {
@@ -121,23 +123,20 @@ function buildOtpMail({ to, firstName, otp, purpose, minutes }) {
 // Every send is echoed to the terminal in the same shape dSlip uses, so one
 // tail across the suite reads the same way.
 //
-// NOTE: this prints the code itself, in production as well as development.
-// That is deliberate and matches dSlip, but it does mean anyone who can read
-// the server log - pm2 logs, a shipped log file, a screen-share - can sign in
-// as that employee for as long as the code lives.
+// NOTE: the code itself is printed only outside production, exactly as
+// dAdmin's logMailSent does. In production the log still records that a mail
+// went out, to whom and with what subject - but never the code, so reading the
+// server log (pm2 logs, a shipped log file, a screen-share) is not a way in.
 function logMailSent(msg, args) {
     const label = args.purpose === "reset" ? "password reset" : "2FA sign-in";
-    console.log(
-        `✅ Mail sent [dAttendance ${label}]
-` +
-        `   From   : ${msg.from}
-` +
-        `   To     : ${msg.to}
-` +
-        `   Subject: ${msg.subject}
-` +
-        `   OTP    : ${args.otp}`
-    );
+    const lines = [
+        `✅ Mail sent [dAttendance ${label}]`,
+        `   From   : ${msg.from}`,
+        `   To     : ${msg.to}`,
+        `   Subject: ${msg.subject}`,
+    ];
+    if (process.env.NODE_ENV !== "production") lines.push(`   OTP    : ${args.otp}`);
+    console.log(lines.join("\n"));
 }
 
 async function sendOtpMail(args) {
