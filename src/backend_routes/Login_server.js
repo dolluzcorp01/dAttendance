@@ -24,6 +24,10 @@
 //  Codes are bcrypt-hashed in att_otp, capped at N wrong guesses, consumed on
 //  use, and expire in two minutes. See sql/004_auth_otp.sql.
 //
+//  Signing out sets dAttendance_signedout, which makes verifyJWT ignore the
+//  shared Inside D cookie until the next sign-in here. Without it, Logout
+//  cannot log anyone out while Inside D is still signed in.
+//
 //  The cookie is dAttendance_token; verifyJWT also accepts dolluzcorp_token
 //  so a session started at Inside D carries over.
 // ============================================================================
@@ -88,6 +92,19 @@ const loadAuthConfig = async () => {
 
 const SESSION_HOURS = 12;
 
+// Set by /logout, cleared by issueSession. It records that somebody signed out
+// of dAttendance ON PURPOSE, so the shared Inside D cookie stops standing in for
+// a dAttendance session until they sign in here again.
+//
+// Host-only (no domain), like every cookie this app sets, so it is sent to
+// dAttendance and nowhere else. Inside D never sees it and its own session is
+// never touched - signing out here signs you out of THIS app only.
+//
+// It outlives the shared cookie on purpose: dolluzcorp_token lasts 7 days, so a
+// shorter marker would let the fallback quietly come back before then.
+const SIGNED_OUT_COOKIE = "dAttendance_signedout";
+const SIGNED_OUT_DAYS = 7;
+
 const sessionCookie = {
     httpOnly: true,
     secure: isProd,
@@ -144,7 +161,14 @@ function sessionRevokedAfter(emp_id, cb) {
 }
 
 const verifyJWT = (req, res, next) => {
-    const token = req.cookies.dAttendance_token || req.cookies.dolluzcorp_token;
+    // dolluzcorp_token is Inside D's cookie on .dolluzcorp.com, accepted here so
+    // somebody arriving from Inside D is already signed in. After an explicit
+    // sign-out that fallback has to stand down: /logout clears
+    // dAttendance_token, and without this the very next request would sign the
+    // person straight back in from Inside D's cookie - which is exactly what it
+    // used to do, leaving Logout unable to log anyone out.
+    const signedOut = req.cookies[SIGNED_OUT_COOKIE] === "1";
+    const token = req.cookies.dAttendance_token || (signedOut ? null : req.cookies.dolluzcorp_token);
     if (!token) return res.status(403).json({ message: "Access Denied. No Token Provided!" });
 
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
@@ -176,6 +200,10 @@ const verifyJWT = (req, res, next) => {
 const issueSession = (res, emp_id) => {
     const token = jwt.sign({ emp_id, typ: "session" }, JWT_SECRET, { expiresIn: `${SESSION_HOURS}h` });
     res.cookie("dAttendance_token", token, sessionCookie);
+    // Both ways in - password only, and password plus emailed code - land here,
+    // so this is the one place that has to lift the marker. From now until the
+    // next sign-out, arriving from Inside D signs you in again as it always did.
+    res.clearCookie(SIGNED_OUT_COOKIE, { httpOnly: true, secure: isProd, sameSite: isProd ? "None" : "Lax" });
 };
 
 // ---------------------------------------------------------------------------
@@ -442,7 +470,7 @@ router.post("/resend-otp", async (req, res) => {
         const cfg = await loadAuthConfig();
         let claims;
         try { claims = jwt.verify(challenge, JWT_SECRET); }
-        catch { return res.status(401).json({ message: "Start again — this request has expired." }); }
+        catch { return res.status(401).json({ message: "Start again - this request has expired." }); }
         if (claims.typ !== "challenge") return res.status(400).json({ message: "Nothing to resend" });
 
         // An unknown-address challenge must behave exactly like a real one.
@@ -546,7 +574,7 @@ const passwordProblem = (pw) => {
 // POST /forgot/reset  { reset_token, password, confirm }
 router.post("/forgot/reset", async (req, res) => {
     const { reset_token, password, confirm } = req.body || {};
-    if (!reset_token) return res.status(400).json({ message: "Start again — this request has expired." });
+    if (!reset_token) return res.status(400).json({ message: "Start again - this request has expired." });
     if (confirm !== undefined && password !== confirm) {
         return res.status(400).json({ message: "The two passwords do not match." });
     }
@@ -556,8 +584,8 @@ router.post("/forgot/reset", async (req, res) => {
     try {
         let claims;
         try { claims = jwt.verify(reset_token, JWT_SECRET); }
-        catch { return res.status(401).json({ message: "Start again — this request has expired." }); }
-        if (claims.typ !== "reset") return res.status(401).json({ message: "Start again — this request has expired." });
+        catch { return res.status(401).json({ message: "Start again - this request has expired." }); }
+        if (claims.typ !== "reset") return res.status(401).json({ message: "Start again - this request has expired." });
 
         // The OTP row is the single-use receipt for the reset. reset_spent_time
         // is a separate marker from consumed_time on purpose: consumed_time was
@@ -572,7 +600,7 @@ router.post("/forgot/reset", async (req, res) => {
                AND consumed_time > NOW() - INTERVAL 15 MINUTE`,
             [claims.otp_id, claims.emp_id]);
         if (!spend.affectedRows) {
-            return res.status(401).json({ message: "Start again — this request has expired." });
+            return res.status(401).json({ message: "Start again - this request has expired." });
         }
 
         const user = await findEmployee(claims.emp_id);
@@ -662,6 +690,12 @@ router.get("/me", verifyJWT, (req, res) => {
 router.post("/logout", async (req, res) => {
     const base = { httpOnly: true, secure: isProd, sameSite: isProd ? "None" : "Lax" };
     res.clearCookie("dAttendance_token", base);
+    // Clearing our own cookie is not enough while Inside D's is still in the
+    // browser - verifyJWT would accept that one instead and the next request
+    // would be signed in again. This marker is what makes the sign-out stick.
+    // Inside D's cookie is deliberately NOT cleared: ending its session too
+    // would sign the person out of every app in the suite.
+    res.cookie(SIGNED_OUT_COOKIE, "1", { ...base, maxAge: SIGNED_OUT_DAYS * 24 * 60 * 60 * 1000 });
 
     if (req.body?.forget === true && req.cookies?.dAttendance_device) {
         try {

@@ -50,7 +50,7 @@ const FALLBACK_BANNERS = [
         tag_label: "Attendance",
         headline: "Every day counts once",
         subline:
-            "Working day, week-off or declared holiday — every date lands in exactly " +
+            "Working day, week-off or declared holiday - every date lands in exactly " +
             "one bucket, and the totals always reconcile.",
         gradient_from: "#0E1A2B",
         gradient_to: "#1E3350",
@@ -305,7 +305,7 @@ export default function Login() {
             // confirmation for 1200ms before redirecting; this matches that,
             // and only on the success path.
             setNotice(res.remembered
-                ? `Signed in. You will not be asked for a code on this browser for ${rememberDays} days.`
+                ? `Signed in. You will not be asked for a code on this browser for ${rememberDays} day${rememberDays === 1 ? "" : "s"}.`
                 : "Signed in. Taking you to your attendance sheet…");
             setTimeout(() => navigate("/attendance", { replace: true }), 1200);
         } catch (err) {
@@ -460,7 +460,7 @@ export default function Login() {
                         {/* The corporate lockup with the tagline, not the app one.
                             The banner speaks for Dolluz Corp; the app names itself
                             on the form side. */}
-                        <img className="dzs-panel-logo" src={dolluzLockup} alt="Dolluz Corp — One Place . One Start . One Team" />
+                        <img className="dzs-panel-logo" src={dolluzLockup} alt="Dolluz Corp - One Place . One Start . One Team" />
 
                         <div className="dzs-banner">
                             <span className="dzs-tag">{banner.tag_label}</span>
@@ -513,13 +513,12 @@ export default function Login() {
                     <>
                         <h2 className="dzs-title">Sign in</h2>
                         <p className="dzs-sub">
-                            Your Dolluz employee ID and password — the same credentials as Inside D.
+                            Your Dolluz employee ID and password - the same credentials as Inside D.
                         </p>
 
-                        <Field label="Employee ID or work email" id="empId">
+                        <Field label="Work email" id="empId">
                             <input
                                 id="empId" className="dzs-input" value={empId} autoComplete="username"
-                                placeholder="DZIND000"
                                 onChange={(e) => { setEmpId(normaliseIdentifier(e.target.value)); setError(""); }}
                                 onKeyDown={(e) => e.key === "Enter" && submitCredentials()}
                             />
@@ -545,7 +544,7 @@ export default function Login() {
                                 <label className="dzs-remember">
                                     <input type="checkbox" checked={remember}
                                            onChange={(e) => setRemember(e.target.checked)} />
-                                    Remember for {rememberDays} days
+                                    Remember for {rememberDays} day{rememberDays === 1 ? "" : "s"}
                                 </label>
                             )}
                             <button type="button" className="dzs-link"
@@ -562,7 +561,7 @@ export default function Login() {
 
                         {twoStepOn && (
                             <p className="dzs-foot">
-                                Ticking <strong>Remember for {rememberDays} days</strong> skips the emailed
+                                Ticking <strong>Remember for {rememberDays} day{rememberDays === 1 ? "" : "s"}</strong> skips the emailed
                                 code on this browser only. Everywhere else, signing in always asks for one.
                             </p>
                         )}
@@ -576,7 +575,7 @@ export default function Login() {
                             We sent a 6-digit code to <strong>{sentTo}</strong>.{" "}
                             {expiresIn > 0
                                 ? <>It expires in <strong className="dzs-count">{mmss(expiresIn)}</strong>.</>
-                                : <>That code has expired — send a new one.</>}
+                                : <>That code has expired - send a new one.</>}
                         </p>
 
                         <Field label="Verification code" id="otp">
@@ -610,7 +609,7 @@ export default function Login() {
 
                         <p className="dzs-foot">
                             Didn’t get it? Check your spam folder. The code is only valid for a
-                            couple of minutes, and never ask anyone to read it to them.
+                            couple of minutes. Never share it with anyone.
                         </p>
                     </>
                 )}
@@ -667,10 +666,10 @@ export default function Login() {
                             employee record.
                         </p>
 
-                        <Field label="Employee ID or work email" id="forgotId">
+                        <Field label="Work email" id="forgotId">
                             <input
                                 id="forgotId" className="dzs-input" value={forgotId} autoComplete="username"
-                                placeholder="DZIND000" autoFocus
+                                autoFocus
                                 onChange={(e) => { setForgotId(normaliseIdentifier(e.target.value)); setError(""); }}
                                 onKeyDown={(e) => e.key === "Enter" && startForgot()}
                             />
@@ -745,7 +744,7 @@ export default function Login() {
 
                         <p className="dzs-foot">
                             Changing your password signs out every browser you had remembered, and
-                            updates it everywhere in the suite — the account lives in dAdmin.
+                            updates it everywhere in the suite - the account lives in dAdmin.
                         </p>
                     </>
                 )}

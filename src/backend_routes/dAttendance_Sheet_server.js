@@ -222,10 +222,22 @@ router.get("/month", verifyJWT, async (req, res) => {
         // has to guess. The same predicate re-runs on save.
         const supportCutoff = cfg.supportDays > 0 ? minusDays(today, cfg.supportDays) : null;
 
+        // Which dates carry a holiday that applies to THIS employee - the same
+        // expansion the calendar itself uses, so scoping (holiday_for /
+        // holiday_value) is applied identically.
+        //
+        // Needed separately because the calendar ranks WEEKOFF above HOLIDAY:
+        // a holiday declared on a Saturday resolves to WEEKOFF, which is right
+        // for the totals (the day must not be counted off twice) but leaves the
+        // page unable to tell that the day is also a holiday. This says so
+        // without moving the precedence that every total depends on.
+        const holidayByDate = cal.expandHolidays(holidays, emp);
+
         const days = calendar.days.map((d) => ({
             ...d,
             mark: d.day_type === "WORK" ? (marks[d.date] || null) : "H",
             approved_leave: leaveDates.has(d.date),
+            holiday_name: holidayByDate.get(d.date) || null,
             support: support[d.date] || null,
             // Whether the H cell offers the control at all. The same predicate
             // re-runs on POST /support-request - this is only so the page does

@@ -1,6 +1,6 @@
 {
   "short_name": "dAttendance",
-  "name": "dAttendance | Dolluz Corp",
+  "name": "dAttendance",
   "icons": [
     { "src": "favicon.ico", "sizes": "16x16 24x24 32x32 48x48 64x64", "type": "image/x-icon" },
     { "src": "logo64.png", "sizes": "64x64", "type": "image/png" },

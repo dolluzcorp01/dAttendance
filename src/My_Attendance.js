@@ -52,12 +52,22 @@ const PORTIONS = [
 // yet, and the cell offers a "+".
 const SUPPORT_GLYPH = { pending: "•", approved: "\u2713", rejected: "!" };
 const SUPPORT_LABEL = {
-    pending: "Weekend support claim — waiting for your approver",
-    approved: "Weekend support approved — counted as a working day",
+    pending: "Weekend support claim - waiting for your approver",
+    approved: "Weekend support approved - counted as a working day",
     rejected: "Weekend support claim was rejected",
 };
 
 const MARK_LABEL = { P: "Present", L: "Leave", H: "Holiday or week-off" };
+
+// 21st, 22nd, 23rd, 24th. The day comes from att_config, so the suffix
+// cannot be hard-coded: -th is wrong for 1, 2, 3, 21, 22, 23, 31.
+const ordinal = (n) => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return `${n}`;
+    const tens = v % 100;
+    if (tens >= 11 && tens <= 13) return `${v}th`;
+    return `${v}${["th", "st", "nd", "rd"][v % 10] || "th"}`;
+};
 
 const prettyDate = (ymd) => {
     if (!ymd) return "";
@@ -579,6 +589,15 @@ export default function MyAttendance() {
                                         {data.days.map((d) => {
                                             const value = d.day_type === "WORK" ? (marks[d.date] || "") : "H";
                                             const cls = value === "P" ? "is-p" : value === "L" ? "is-l" : value === "H" ? "is-h" : "";
+                                            // A declared holiday and a week-off are both H, so the tint is
+                                            // the only thing telling them apart. It follows holiday_name,
+                                            // not day_type: a holiday declared ON a Saturday resolves to
+                                            // WEEKOFF (so the day is not counted off twice) and would
+                                            // otherwise show as an ordinary week-off. A working day never
+                                            // takes the tint - an adhoc day over a holiday is worked.
+                                            const isHoliday = d.day_type !== "WORK" && d.day_type !== "NON_EMPLOYED"
+                                                && (d.day_type === "HOLIDAY" || !!d.holiday_name);
+                                            const tone = cls + (isHoliday ? " is-holiday" : "");
                                             // The corner marker shows on an off-day that can still
                                             // be claimed, AND on any day carrying a claim. Those are
                                             // different cells: once a claim is approved the day is a
@@ -586,15 +605,15 @@ export default function MyAttendance() {
                                             const sup = d.support;
                                             const showDot = d.can_request_support || !!sup;
                                             return (
-                                                <td key={d.date} className={`dz-grid-cell dz-grid-mark-cell ${cls}`}>
+                                                <td key={d.date} className={`dz-grid-cell dz-grid-mark-cell ${tone}`}>
                                                     <button
                                                         type="button"
-                                                        className={`dz-mark ${cls}${d.editable ? "" : " is-locked"}${picker?.date === d.date ? " is-open" : ""}`}
+                                                        className={`dz-mark ${tone}${d.editable ? "" : " is-locked"}${picker?.date === d.date ? " is-open" : ""}`}
                                                         disabled={!d.editable}
                                                         aria-haspopup={d.editable ? "listbox" : undefined}
                                                         aria-expanded={d.editable ? picker?.date === d.date : undefined}
-                                                        aria-label={`${prettyDate(d.date)} — ${MARK_LABEL[value] || "not marked"}`}
-                                                        title={`${prettyDate(d.date)} — ${d.label}${d.approved_leave ? " · approved leave in dTime" : ""}`}
+                                                        aria-label={`${prettyDate(d.date)} - ${MARK_LABEL[value] || "not marked"}`}
+                                                        title={`${prettyDate(d.date)} - ${d.label}${d.holiday_name && d.day_type !== "HOLIDAY" ? ` · ${d.holiday_name}` : ""}${d.approved_leave ? " · approved leave in dTime" : ""}`}
                                                         onClick={(e) => openPicker(d, e)}
                                                     >
                                                         {value || "-"}
@@ -605,7 +624,7 @@ export default function MyAttendance() {
                                                             className={`dz-support-dot${sup ? ` is-${sup.status}` : ""}${supportAt?.day.date === d.date ? " is-open" : ""}`}
                                                             aria-haspopup="dialog"
                                                             aria-expanded={supportAt?.day.date === d.date}
-                                                            aria-label={`${prettyDate(d.date)} — ${SUPPORT_LABEL[sup?.status] || "record weekend support"}`}
+                                                            aria-label={`${prettyDate(d.date)} - ${SUPPORT_LABEL[sup?.status] || "record weekend support"}`}
                                                             title={SUPPORT_LABEL[sup?.status] || "Worked this day? Record it"}
                                                             onClick={(e) => openSupport(d, e)}
                                                         >
@@ -647,9 +666,10 @@ export default function MyAttendance() {
                         </div>
 
                         <div className="dz-legend">
-                            <Legend cls="is-p" label="P — present" />
-                            <Legend cls="is-l" label="L — leave" />
-                            <Legend cls="is-h" label="H — holiday or week-off (set by admin)" />
+                            <Legend cls="is-p" label="P - present" />
+                            <Legend cls="is-l" label="L - leave" />
+                            <Legend cls="is-h" label="H - week-off" />
+                            <Legend cls="is-h is-holiday" label="H - holiday (set by admin)" />
                             {monthIsOpen && <span>Click a working day to choose Present or Leave.</span>}
                             {data.leave_source === "dtime" &&
                                 <span>L days come from approved leave in dTime and can't be changed here.</span>}
@@ -663,7 +683,7 @@ export default function MyAttendance() {
                             <div className="dz-payroll-note">
                                 <InfoIcon />
                                 <span>
-                                    Please fill and submit your attendance sheet without delay — your
+                                    Please fill and submit your attendance sheet without delay - your
                                     salary for {MONTHS[month - 1]} is processed from these numbers.
                                     A sheet that arrives after payroll has run is paid in the next cycle.
                                 </span>
@@ -709,7 +729,7 @@ export default function MyAttendance() {
                         <div className="dz-modal-body">
                             <p className="dz-modal-note">
                                 Once submitted the sheet goes to your reporting manager and
-                                locks — you cannot change it afterwards without raising an
+                                locks - you cannot change it afterwards without raising an
                                 edit request, and you get {data.sheet.edit_requests_left} of
                                 those for this month.
                             </p>
@@ -742,7 +762,7 @@ export default function MyAttendance() {
                         <div className="dz-modal-body">
                             <p className="dz-modal-note">
                                 Your {MONTHS[month - 1]} {year} sheet is submitted and locked. Tell the approver
-                                what needs changing — you have {data?.sheet.edit_requests_left} request
+                                what needs changing - you have {data?.sheet.edit_requests_left} request
                                 {data?.sheet.edit_requests_left === 1 ? "" : "s"} left for this month.
                             </p>
                             <label className="dz-label" htmlFor="reason">Reason</label>
@@ -976,13 +996,13 @@ function Notices({ data, summary }) {
     else if (s === "edit_requested") out.push(["amber", "Your edit request is with the approver. The sheet stays locked until they respond."]);
     else if (s === "submitted") out.push(["green", "Submitted and waiting for approval. Raise an edit request if something is wrong."]);
     else if (s === "approved") out.push(["green",
-        "Approved and closed. This month can no longer be changed — if something is wrong, ask an admin. You can still download the sheet."]);
+        "Approved and closed. This month can no longer be changed - if something is wrong, ask an admin. You can still download the sheet."]);
     else if (s === "rejected") out.push(["red", "Your sheet was rejected. Correct it and submit again."]);
-    else if (s === "edit_open") out.push(["amber", "Your edit request was accepted — the sheet is open again. Submit it once you're done."]);
+    else if (s === "edit_open") out.push(["amber", "Your edit request was accepted - the sheet is open again. Submit it once you're done."]);
     else if (f.is_current_month && !f.submit_window_open) {
         out.push(["info",
             `Submit opens on ${prettyDate(f.last_working_date)}, the last working day of this month. ` +
-            `From the ${f.fill_forward_from_day}th you can fill the rest of the month ahead of time.`]);
+            `From the ${ordinal(f.fill_forward_from_day)} you can fill the rest of the month ahead of time.`]);
     }
 
     if (summary && summary.unmarked_days > 0 && !f.is_future_month && !f.before_joining) {
@@ -993,7 +1013,7 @@ function Notices({ data, summary }) {
     // dTime says one thing, the sheet says another. Advisory - it does not block.
     if (data.leave_mismatch?.length) {
         out.push(["amber",
-            `${data.leave_mismatch.length} day(s) disagree with your approved leave in dTime: ` +
+            `${data.leave_mismatch.length} day${data.leave_mismatch.length === 1 ? " disagrees" : "s disagree"} with your approved leave in dTime: ` +
             data.leave_mismatch.slice(0, 4).map((m) => `${m.date} marked ${m.marked}`).join(", ") +
             (data.leave_mismatch.length > 4 ? "…" : "")]);
     }

@@ -16,6 +16,13 @@
   --dz-red-bg:   #FBEAE8;
   --dz-amber:    #B7791F;
   --dz-amber-bg: #FBF3E0;
+  /* A declared holiday (dTime's holidays table) against an ordinary
+     week-off. Both read H on the sheet, so this tint is the only thing
+     separating them. Violet on purpose: green, red, amber and blue are
+     already spoken for by present, leave, pending and the support marker,
+     and a warm tint was too close to the week-off's own #F2F0EC. */
+  --dz-holiday-bg:  #EAE3F7;
+  --dz-holiday-ink: #6B58A6;
   --dz-grey:     #8A9099;
   --dz-grey-bg:  #EFEFEF;
   /* Informational blue. Already in use by the payroll note on My attendance;

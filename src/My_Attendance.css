@@ -96,6 +96,11 @@
 .dz-grid-mark-cell.is-p { background: var(--dz-green-bg); }
 .dz-grid-mark-cell.is-l { background: var(--dz-red-bg); }
 .dz-grid-mark-cell.is-h { background: #F2F0EC; }
+/* A holiday from dTime, set apart from an ordinary week-off - including
+   one that falls ON a week-off, which the calendar still counts as the
+   week-off so the day is not taken off twice. */
+.dz-grid-mark-cell.is-h.is-holiday { background: var(--dz-holiday-bg); }
+.dz-mark.is-h.is-holiday { color: var(--dz-holiday-ink); }
 
 .dz-mark {
   display: block;
@@ -170,10 +175,15 @@
   font-size: 11.5px; color: var(--dz-muted);
 }
 .dz-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
 .dz-legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--dz-line); }
-.dz-legend-swatch.is-p { background: var(--dz-green-bg); }
-.dz-legend-swatch.is-l { background: var(--dz-red-bg); }
-.dz-legend-swatch.is-h { background: #F2F0EC; }
+/* Filled with the ink the LETTER takes in the grid, not the cell's pale
+   background: at 12px a wash of #EAE3F7 or #F2F0EC reads as an empty box,
+   and the whole point of the key is telling four of them apart. */
+.dz-legend-swatch.is-p { background: var(--dz-green); border-color: var(--dz-green); }
+.dz-legend-swatch.is-l { background: var(--dz-red); border-color: var(--dz-red); }
+.dz-legend-swatch.is-h { background: var(--dz-grey); border-color: var(--dz-grey); }
+.dz-legend-swatch.is-h.is-holiday { background: var(--dz-holiday-ink); border-color: var(--dz-holiday-ink); }
 
 /* ── the "fill it on time" note under the legend ── */
 .dz-payroll-note {
